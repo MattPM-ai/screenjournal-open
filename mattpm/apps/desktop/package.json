@@ -1,0 +1,52 @@
+{
+  "name": "desktop",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "export": "next build && next export",
+    "start": "next start",
+    "lint": "eslint",
+    "check-types": "tsc --noEmit",
+    "setup-aw": "node scripts/setup-resource.js activitywatch",
+    "setup-ffmpeg": "node scripts/setup-resource.js ffmpeg",
+    "setup": "node scripts/setup-resource.js --all",
+    "check-aw": "node scripts/check-resources.js activitywatch",
+    "check-ffmpeg": "node scripts/check-resources.js ffmpeg",
+    "check": "node scripts/check-resources.js",
+    "bundle-resources": "node scripts/bundle-resources.js",
+    "sign-app": "node scripts/sign-app.js",
+    "tauri": "tauri",
+    "tauri:dev": "npm run check && node scripts/run-tauri.js dev",
+    "desktop": "npm run check && node scripts/run-tauri.js dev",
+    "tauri:build": "npm run check && node scripts/run-tauri.js build && npm run bundle-resources && npm run sign-app",
+    "release": "node scripts/release.js"
+  },
+  "dependencies": {
+    "@repo/theme": "*",
+    "@repo/ui": "*",
+    "@tauri-apps/api": "^2.9.0",
+    "@tauri-apps/plugin-dialog": "^2.4.2",
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-updater": "^2",
+    "next": "16.0.1",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "*",
+    "@repo/tailwind-config": "*",
+    "@repo/typescript-config": "*",
+    "@tailwindcss/postcss": "^4.0.0",
+    "@tauri-apps/cli": "^2.9.4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "baseline-browser-mapping": "^2.9.5",
+    "eslint": "^9",
+    "eslint-config-next": "16.0.1",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5"
+  }
+}

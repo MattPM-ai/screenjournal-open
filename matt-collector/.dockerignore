@@ -1,0 +1,30 @@
+# Git
+.git
+.gitignore
+
+# Environment
+.env
+
+# Documentation
+README.md
+CLAUDE.md
+
+# IDE
+.vscode
+.idea
+
+# Build artifacts
+bin/
+dist/
+*.exe
+*.test
+*.out
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore

@@ -1,0 +1,95 @@
+# ============================================================================
+# SCREENJOURNAL-OPEN - ROOT .gitignore
+# ============================================================================
+# 
+# This is the root-level .gitignore for the consolidated screenjournal-open
+# repository. Individual components may have their own .gitignore files that
+# are preserved for component-specific ignores.
+#
+# ============================================================================
+
+# Environment Variables
+.env
+.env.local
+.env*.local
+.env.*.local
+
+# IDE and Editor Files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# OS Specific Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Temporary Files
+*.tmp
+*.temp
+*.cache
+.cache/
+
+# Docker
+docker-compose.override.yml
+
+# Local Development
+.local/
+local/
+*.local
+
+# Build Artifacts (root level)
+dist/
+build/
+out/
+*.build/
+
+# Test Coverage
+coverage/
+.nyc_output/
+*.coverage
+
+# Package Manager Locks (optional - uncomment if you want to ignore)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# Service-specific binaries at root
+/server
+/bin
+/main
+
+# Database files (if any local dev databases)
+*.db
+*.sqlite
+*.sqlite3
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# ============================================================================
+# Note: Component-specific .gitignore files are preserved in:
+# - matt-collector/.gitignore
+# - matt-tracker-frontend/.gitignore
+# - matt-tracker-report/.gitignore
+# - mattpm/.gitignore
+# ============================================================================
+

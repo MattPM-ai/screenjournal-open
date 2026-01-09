@@ -1,0 +1,64 @@
+[package]
+name = "Mattpm"
+version = "0.1.0"
+description = "A Tauri App"
+authors = ["you"]
+license = ""
+repository = ""
+edition = "2024"
+rust-version = "1.91.1"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.5.1", features = [] }
+dotenvy = "0.15"
+rand = "0.8"
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.9.2", features = ["protocol-asset"] }
+tauri-plugin-log = "2"
+once_cell = "1.19"
+reqwest = { version = "0.12", features = ["json", "native-tls", "multipart"] }
+tokio = { version = "1", features = [
+  "macros",
+  "rt-multi-thread",
+  "time",
+  "sync",
+] }
+tauri-plugin-dialog = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2.2"
+aw-client-rust = { git = "https://github.com/ActivityWatch/aw-server-rust.git", branch = "master" }
+aw-models = { git = "https://github.com/ActivityWatch/aw-server-rust.git", branch = "master" }
+chrono = { version = "0.4", features = ["serde"] }
+
+# Screen recording dependencies
+scap = "0.0.8"  # Cross-platform screen capture (pinned to stable version)
+regex = "1.10"
+walkdir = "2.4"
+hostname = "0.4"
+rand = "0.8"
+dirs = "5.0"
+
+# Collector dependencies
+tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+uuid = { version = "1.10", features = ["v4", "serde"] }
+futures-util = "0.3"
+
+# Process management for orphan detection
+sysinfo = "0.30"
+
+# Gemini AI integration dependencies
+base64 = "0.22"            # Video encoding for API upload
+
+# Platform-specific dependencies
+[target.'cfg(windows)'.dependencies]
+windows-capture = ">=1.3.6, <1.5"  # Pinned for scap 0.0.8 compatibility (1.5+ breaks API)

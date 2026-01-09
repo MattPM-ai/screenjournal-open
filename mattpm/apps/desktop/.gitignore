@@ -1,0 +1,73 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# ActivityWatch binaries - ignore downloaded binaries but keep directory structure
+# These are large platform-specific binaries that should be downloaded via `npm run setup-aw`
+# Not committed to avoid repo bloat (~200MB total for all platforms)
+src-tauri/resources/activitywatch/darwin/aarch64/*
+!src-tauri/resources/activitywatch/darwin/aarch64/.gitkeep
+src-tauri/resources/activitywatch/darwin/x86_64/*
+!src-tauri/resources/activitywatch/darwin/x86_64/.gitkeep
+src-tauri/resources/activitywatch/linux/x86_64/*
+!src-tauri/resources/activitywatch/linux/x86_64/.gitkeep
+src-tauri/resources/activitywatch/windows/x86_64/*
+!src-tauri/resources/activitywatch/windows/x86_64/.gitkeep
+
+# FFmpeg binaries - ignore downloaded binaries but keep directory structure
+# These are large platform-specific binaries that should be downloaded via `npm run setup-ffmpeg`
+# Not committed to avoid repo bloat (~70-100MB per platform)
+src-tauri/resources/ffmpeg/darwin/aarch64/*
+!src-tauri/resources/ffmpeg/darwin/aarch64/.gitkeep
+src-tauri/resources/ffmpeg/darwin/x86_64/*
+!src-tauri/resources/ffmpeg/darwin/x86_64/.gitkeep
+src-tauri/resources/ffmpeg/linux/x86_64/*
+!src-tauri/resources/ffmpeg/linux/x86_64/.gitkeep
+src-tauri/resources/ffmpeg/windows/x86_64/*
+!src-tauri/resources/ffmpeg/windows/x86_64/.gitkeep
+
+# Temporary download directories used by setup scripts
+.temp-aw-download/
+.temp-ffmpeg-download/
+.temp-resource-download/
+
+# production
+/build
+src-tauri/target/
+dist/
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+!.env.example
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts

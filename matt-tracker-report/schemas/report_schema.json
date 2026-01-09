@@ -1,0 +1,222 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "type": "object",
+  "required": ["organizations", "generatedAt", "periodAnalyzed"],
+  "properties": {
+    "organizations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["organizationName", "users"],
+        "properties": {
+          "organizationName": {"type": "string"},
+          "userRanking": {
+            "type": "object",
+            "required": ["rankings", "summary"],
+            "properties": {
+              "rankings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "userName",
+                    "rank",
+                    "totalActiveHours",
+                    "averageDailyActiveHours",
+                    "totalAfkHours",
+                    "activePercentage",
+                    "totalDiscrepancies",
+                    "criticalDiscrepancies"
+                  ],
+                  "properties": {
+                    "userName": {"type": "string"},
+                    "rank": {"type": "integer", "minimum": 1},
+                    "totalActiveHours": {"type": "number"},
+                    "averageDailyActiveHours": {"type": "number"},
+                    "totalAfkHours": {"type": "number"},
+                    "activePercentage": {"type": "number", "minimum": 0, "maximum": 100},
+                    "totalDiscrepancies": {"type": "integer"},
+                    "criticalDiscrepancies": {"type": "integer"},
+                    "insights": {"type": "string"}
+                  }
+                }
+              },
+              "summary": {"type": "string"}
+            }
+          },
+          "users": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["userName", "overallReport", "dailyReports"],
+              "properties": {
+                "userName": {"type": "string"},
+                "overallReport": {
+                  "type": "object",
+                  "required": [
+                    "periodStart",
+                    "periodEnd",
+                    "totalActiveHours",
+                    "totalActiveMinutes",
+                    "totalAfkHours",
+                    "totalAfkMinutes",
+                    "averageDailyActiveHours",
+                    "averageDailyActiveMinutes",
+                    "totalDiscrepancies",
+                    "criticalDiscrepancies",
+                    "summary",
+                    "conclusion"
+                  ],
+                  "properties": {
+                    "periodStart": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+                    "periodEnd": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+                    "totalActiveHours": {"type": "number"},
+                    "totalActiveMinutes": {"type": "number"},
+                    "totalAfkHours": {"type": "number"},
+                    "totalAfkMinutes": {"type": "number"},
+                    "averageDailyActiveHours": {"type": "number"},
+                    "averageDailyActiveMinutes": {"type": "number"},
+                    "totalDiscrepancies": {"type": "integer"},
+                    "criticalDiscrepancies": {"type": "integer"},
+                    "summary": {"type": "string"},
+                    "conclusion": {"type": "string"}
+                  }
+                },
+                "dailyReports": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "date",
+                      "hourlyBreakdown",
+                      "totalActiveMinutes",
+                      "totalActiveHours",
+                      "totalAfkMinutes",
+                      "totalAfkHours",
+                      "notableDiscrepancies",
+                      "summary"
+                    ],
+                    "properties": {
+                      "date": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+                      "hourlyBreakdown": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": [
+                            "hour",
+                            "startTime",
+                            "endTime",
+                            "activeMinutes",
+                            "afkMinutes",
+                            "appUsage",
+                            "totalMinutes"
+                          ],
+                          "properties": {
+                            "hour": {"type": "integer", "minimum": 0, "maximum": 23},
+                            "startTime": {"type": "string", "pattern": "^\\d{2}:\\d{2}$"},
+                            "endTime": {"type": "string", "pattern": "^\\d{2}:\\d{2}$"},
+                            "activeMinutes": {"type": "number"},
+                            "afkMinutes": {"type": "number"},
+                            "appUsage": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "required": ["appName", "durationMinutes"],
+                                "properties": {
+                                  "appName": {"type": "string"},
+                                  "durationMinutes": {"type": "number"},
+                                  "windowTitles": {
+                                    "type": "array",
+                                    "items": {"type": "string"}
+                                  }
+                                }
+                              }
+                            },
+                            "timelineEvents": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "required": [
+                                  "time",
+                                  "app",
+                                  "appTitle",
+                                  "description",
+                                  "productiveScore",
+                                  "durationSeconds"
+                                ],
+                                "properties": {
+                                  "time": {"type": "string", "format": "date-time"},
+                                  "app": {"type": "string"},
+                                  "appTitle": {"type": "string"},
+                                  "description": {"type": "string"},
+                                  "productiveScore": {"type": "integer", "minimum": 0, "maximum": 10},
+                                  "durationSeconds": {"type": "integer", "minimum": 0}
+                                }
+                              }
+                            },
+                            "totalMinutes": {"type": "integer"}
+                          }
+                        }
+                      },
+                      "totalActiveMinutes": {"type": "number"},
+                      "totalActiveHours": {"type": "number"},
+                      "totalAfkMinutes": {"type": "number"},
+                      "totalAfkHours": {"type": "number"},
+                      "notableDiscrepancies": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": [
+                            "type",
+                            "severity",
+                            "startTime",
+                            "endTime",
+                            "durationMinutes",
+                            "description"
+                          ],
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "extended_afk",
+                                "social_media",
+                                "media_consumption",
+                                "excessive_idle",
+                                "low_productivity_apps",
+                                "suspicious_pattern"
+                              ]
+                            },
+                            "severity": {
+                              "type": "string",
+                              "enum": ["low", "medium", "high", "critical"]
+                            },
+                            "startTime": {"type": "string", "pattern": "^\\d{2}:\\d{2}$"},
+                            "endTime": {"type": "string", "pattern": "^\\d{2}:\\d{2}$"},
+                            "durationMinutes": {"type": "number"},
+                            "description": {"type": "string"},
+                            "context": {"type": "string"}
+                          }
+                        }
+                      },
+                      "summary": {"type": "string"}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "generatedAt": {"type": "string"},
+    "periodAnalyzed": {
+      "type": "object",
+      "required": ["startDate", "endDate"],
+      "properties": {
+        "startDate": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+        "endDate": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"}
+      }
+    }
+  }
+}
+

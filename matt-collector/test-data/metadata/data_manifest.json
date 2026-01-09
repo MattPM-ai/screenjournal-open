@@ -1,0 +1,22 @@
+{
+  "generated_at": "2025-11-21T14:05:12.284880",
+  "organization": "Turbo",
+  "date_range": {
+    "start": "2025-11-15",
+    "end": "2025-11-23",
+    "total_days": 9
+  },
+  "record_counts": {
+    "window_activity": 5128,
+    "afk_status": 382,
+    "app_usage": 1272,
+    "daily_metrics": 48,
+    "total": 6830
+  },
+  "users": 8,
+  "upload_method": "curl",
+  "authentication": "Token",
+  "formats": [
+    "influxdb_line_protocol"
+  ]
+}

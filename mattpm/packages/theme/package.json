@@ -1,0 +1,13 @@
+{
+  "name": "@repo/theme",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./src/globals.css",
+  "exports": {
+    "./globals.css": "./src/globals.css"
+  },
+  "files": [
+    "src"
+  ]
+}
+

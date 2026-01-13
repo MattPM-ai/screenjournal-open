@@ -135,8 +135,14 @@ pub fn submit_job(job: GeminiJob) -> Result<(), String> {
         return Ok(());
     }
 
-    // Check if API key exists
-    if !crate::recording::gemini::has_api_key() {
+    // Check if API key exists (check user-provided key first if AppHandle is available)
+    let has_key = if let Some(app_handle) = APP_HANDLE.lock().unwrap().as_ref() {
+        crate::recording::gemini::has_api_key_with_app(app_handle)
+    } else {
+        crate::recording::gemini::has_api_key()
+    };
+    
+    if !has_key {
         log::warn!(
             "[GEMINI-QUEUE] ⚠ No API key configured, skipping: segment={} display={}",
             job.segment_id,
@@ -272,7 +278,7 @@ async fn process_job(app: &AppHandle, mut job: GeminiJob) {
         return;
     }
 
-    // Call Gemini API
+    // Call Gemini API (pass app handle to check user-provided API key)
     let result = client::analyze_video(
         &job.video_path,
         &job.segment_id,
@@ -280,6 +286,7 @@ async fn process_job(app: &AppHandle, mut job: GeminiJob) {
         job.metadata.duration_seconds,
         &job.metadata.start_time,
         &config,
+        Some(app),
     )
     .await;
 

@@ -36,3 +36,7 @@ Thumbs.db
 /dist/
 /matt-collector
 /server
+
+# Local storage
+/storage/
+storage/

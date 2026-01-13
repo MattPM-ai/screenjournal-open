@@ -15,39 +15,21 @@
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import WeeklyReportForm from '@/components/WeeklyReportForm'
 import WeeklyReportLoading from '@/components/WeeklyReportLoading'
 import WeeklyReportDisplay from '@/components/WeeklyReportDisplay'
-import { checkAuthentication } from '@/lib/authAPI'
 
 export const dynamic = 'force-dynamic'
 
 type PageState = 'form' | 'loading' | 'results'
 
 export default function WeeklyReportsPage() {
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const authStatus = await checkAuthentication()
-        if (!authStatus) {
-          window.location.href = '/login'
-          return
-        }
-      } catch (error) {
-        console.error('Failed to check authentication:', error)
-        window.location.href = '/login'
-      }
-    }
-
-    checkAuth()
-  }, [])
   
   const [pageState, setPageState] = useState<PageState>('form')
   const [reportData, setReportData] = useState<any>(null)
   const [formData, setFormData] = useState<{
-    accountId: number
     users: Array<{ name: string; id: number }>
     org: string
     orgId: number
@@ -55,7 +37,6 @@ export default function WeeklyReportsPage() {
   } | null>(null)
 
   const handleFormSubmit = async (data: {
-    accountId: number
     users: Array<{ name: string; id: number }>
     org: string
     orgId: number

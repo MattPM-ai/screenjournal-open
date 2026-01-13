@@ -31,6 +31,9 @@ import {
   updateGeminiConfig,
   getGeminiQueueStatus,
   hasGeminiApiKey,
+  getGeminiApiKeyStatus,
+  setGeminiApiKey,
+  deleteGeminiApiKey,
   DEFAULT_GEMINI_CONFIG,
   type GeminiConfig,
   type GeminiQueueStatus,
@@ -43,7 +46,7 @@ import {
   testConnection,
   validateConfig,
 } from "@/lib/collectorClient";
-import { getProfile, getOrganisations, getAccessToken, type User, type Organisation } from "@/lib/authAPI";
+import { getAccessToken } from "@/lib/authAPI";
 import { Button } from "@repo/ui";
 import { Video, Settings2, HardDrive, Gauge, Cloud, CheckCircle, AlertCircle, Network, X, Loader, Monitor, Sparkles } from "lucide-react";
 import { message } from "@tauri-apps/plugin-dialog";
@@ -98,72 +101,15 @@ export function Settings() {
   const [collectorError, setCollectorError] = useState<string>("");
   const [showAdvanced, setShowAdvanced] = useState(false);
   
-  // User and organisation data
-  const [user, setUser] = useState<User | null>(null);
-  const [organisations, setOrganisations] = useState<Organisation[]>([]);
-  const [loadingUserData, setLoadingUserData] = useState(false);
 
   // Gemini AI settings state
   const [geminiConfig, setGeminiConfig] = useState<GeminiConfig>(DEFAULT_GEMINI_CONFIG);
   const [geminiQueueStatus, setGeminiQueueStatus] = useState<GeminiQueueStatus | null>(null);
   const [geminiLoading, setGeminiLoading] = useState(true);
   const [geminiApiKeySet, setGeminiApiKeySet] = useState(false);
+  const [geminiApiKeyInput, setGeminiApiKeyInput] = useState<string>("");
+  const [showApiKey, setShowApiKey] = useState(false);
 
-  /**
-   * Load user profile and organisations
-   */
-  const loadUserData = async () => {
-    setLoadingUserData(true);
-    try {
-      const [profileData, orgsData] = await Promise.all([
-        getProfile().catch(() => null),
-        getOrganisations().catch(() => []),
-      ]);
-      
-      if (profileData) {
-        setUser(profileData);
-        // Always populate user fields from authenticated profile
-        setCollectorConfig((prev) => ({
-          ...prev,
-          user_name: profileData.name || profileData.email,
-          user_id: String(profileData.id),
-          account_id: profileData.account_id ? String(profileData.account_id) : '',
-        }));
-      }
-      
-      setOrganisations(orgsData);
-      
-      // If an organisation is already selected, make sure it's still valid
-      if (collectorConfig.org_id && orgsData.length > 0) {
-        const selectedOrg = orgsData.find(org => org.id === collectorConfig.org_id);
-        if (selectedOrg) {
-          setCollectorConfig((prev) => ({
-            ...prev,
-            org_name: selectedOrg.name,
-            org_id: selectedOrg.id,
-          }));
-        }
-      }
-    } catch (error) {
-      console.error("Failed to load user data:", error);
-    } finally {
-      setLoadingUserData(false);
-    }
-  };
-
-  /**
-   * Handle organisation selection
-   */
-  const handleOrganisationSelect = (orgId: string) => {
-    const selectedOrg = organisations.find(org => org.id === orgId);
-    if (selectedOrg) {
-      setCollectorConfig((prev) => ({
-        ...prev,
-        org_name: selectedOrg.name,
-        org_id: selectedOrg.id,
-      }));
-    }
-  };
 
   /**
    * Load all configuration on component mount
@@ -174,7 +120,6 @@ export function Settings() {
     loadCollectorConfig();
     loadStatus();
     loadDisplayCount();
-    loadUserData();
     loadGeminiSettings();
     
     // Update collector with current token if available
@@ -240,12 +185,25 @@ export function Settings() {
     setCollectorError("");
     try {
       const loadedConfig = await getCollectorConfig();
-      setCollectorConfig(loadedConfig);
-      // After loading config, also load user data to populate fields
-      await loadUserData();
+      // Always force default/forced values for protected fields
+      const configWithDefaults = {
+        ...loadedConfig,
+        user_name: DEFAULT_COLLECTOR_CONFIG.user_name,
+        user_id: DEFAULT_COLLECTOR_CONFIG.user_id,
+        org_name: DEFAULT_COLLECTOR_CONFIG.org_name,
+        org_id: DEFAULT_COLLECTOR_CONFIG.org_id,
+        account_id: DEFAULT_COLLECTOR_CONFIG.account_id,
+        server_url: DEFAULT_COLLECTOR_CONFIG.server_url,
+        auth_url: DEFAULT_COLLECTOR_CONFIG.auth_url,
+        enabled: true, // Always force enabled to true
+      };
+      setCollectorConfig(configWithDefaults);
+      // Save the config with enforced defaults
+      await updateCollectorConfig(configWithDefaults);
     } catch (err: any) {
       setCollectorError(`Failed to load configuration: ${err.message}`);
-      setCollectorConfig(DEFAULT_COLLECTOR_CONFIG);
+      // Set defaults with enabled forced to true
+      setCollectorConfig({ ...DEFAULT_COLLECTOR_CONFIG, enabled: true });
     } finally {
       setCollectorLoading(false);
     }
@@ -283,16 +241,55 @@ export function Settings() {
     try {
       const [config, hasKey, queueStatus] = await Promise.all([
         getGeminiConfig(),
-        hasGeminiApiKey(),
+        getGeminiApiKeyStatus(),
         getGeminiQueueStatus(),
       ]);
       setGeminiConfig(config);
       setGeminiApiKeySet(hasKey);
       setGeminiQueueStatus(queueStatus);
+      // Don't load the actual API key value (for security), just check if it exists
+      setGeminiApiKeyInput("");
     } catch (error) {
       console.error("Failed to load Gemini settings:", error);
     } finally {
       setGeminiLoading(false);
+    }
+  };
+  
+  /**
+   * Save Gemini API key
+   */
+  const handleSaveGeminiApiKey = async () => {
+    if (!geminiApiKeyInput.trim()) {
+      await message("Please enter an API key", { kind: "error", title: "Invalid API Key" });
+      return;
+    }
+    
+    try {
+      await setGeminiApiKey(geminiApiKeyInput.trim());
+      setGeminiApiKeyInput("");
+      setShowApiKey(false);
+      // Reload settings to update status
+      await loadGeminiSettings();
+      await message("API key saved successfully", { kind: "info", title: "Success" });
+    } catch (error: any) {
+      await message(`Failed to save API key: ${error?.message || error}`, { kind: "error", title: "Error" });
+    }
+  };
+  
+  /**
+   * Delete Gemini API key
+   */
+  const handleDeleteGeminiApiKey = async () => {
+    try {
+      await deleteGeminiApiKey();
+      setGeminiApiKeyInput("");
+      setShowApiKey(false);
+      // Reload settings to update status
+      await loadGeminiSettings();
+      await message("API key deleted successfully", { kind: "info", title: "Success" });
+    } catch (error: any) {
+      await message(`Failed to delete API key: ${error?.message || error}`, { kind: "error", title: "Error" });
     }
   };
 
@@ -310,11 +307,27 @@ export function Settings() {
 
   /**
    * Update a field in the collector configuration
+   * Prevents changes to user/org fields, URLs, and enabled - always uses defaults/forced values
    */
   const updateCollectorField = <K extends keyof CollectorConfig>(
     field: K,
     value: CollectorConfig[K]
   ) => {
+    // Prevent changes to protected fields - always use defaults/forced values
+    const protectedFields: (keyof CollectorConfig)[] = [
+      'user_name', 
+      'user_id', 
+      'org_name', 
+      'org_id', 
+      'account_id',
+      'server_url',
+      'auth_url',
+      'enabled'
+    ];
+    if (protectedFields.includes(field)) {
+      // Silently ignore attempts to change protected fields
+      return;
+    }
     setCollectorConfig((prev) => ({ ...prev, [field]: value }));
     setCollectorError("");
     setTestResult(null);
@@ -339,8 +352,17 @@ export function Settings() {
       const appJwtToken = getAccessToken();
       console.log("[SETTINGS] handleTestConnection - getAccessToken() returned:", appJwtToken ? `token (length: ${appJwtToken.length})` : "null");
       
+      // Always enforce default/forced values for protected fields
       const configWithToken = {
         ...collectorConfig,
+        user_name: DEFAULT_COLLECTOR_CONFIG.user_name,
+        user_id: DEFAULT_COLLECTOR_CONFIG.user_id,
+        org_name: DEFAULT_COLLECTOR_CONFIG.org_name,
+        org_id: DEFAULT_COLLECTOR_CONFIG.org_id,
+        account_id: DEFAULT_COLLECTOR_CONFIG.account_id,
+        server_url: DEFAULT_COLLECTOR_CONFIG.server_url,
+        auth_url: DEFAULT_COLLECTOR_CONFIG.auth_url,
+        enabled: true, // Always force enabled to true
         app_jwt_token: appJwtToken || undefined,
       };
       
@@ -399,20 +421,30 @@ export function Settings() {
     }
 
     // 3. Validate and save collector settings
-    const validationError = validateConfig(collectorConfig);
+    // Always enforce protected field values before validation
+    const appJwtToken = getAccessToken();
+    const configToSave = {
+      ...collectorConfig,
+      user_name: DEFAULT_COLLECTOR_CONFIG.user_name,
+      user_id: DEFAULT_COLLECTOR_CONFIG.user_id,
+      org_name: DEFAULT_COLLECTOR_CONFIG.org_name,
+      org_id: DEFAULT_COLLECTOR_CONFIG.org_id,
+      account_id: DEFAULT_COLLECTOR_CONFIG.account_id,
+      server_url: DEFAULT_COLLECTOR_CONFIG.server_url,
+      auth_url: DEFAULT_COLLECTOR_CONFIG.auth_url,
+      enabled: true, // Always force enabled to true
+      app_jwt_token: appJwtToken || undefined,
+    };
+    
+    const validationError = validateConfig(configToSave);
     if (validationError) {
       setCollectorError(validationError);
       errors.push(`Collector validation: ${validationError}`);
     } else {
       try {
-        // Include app JWT token from localStorage if available
-        const appJwtToken = getAccessToken();
-        const configWithToken = {
-          ...collectorConfig,
-          app_jwt_token: appJwtToken || undefined,
-        };
-        
-        await updateCollectorConfig(configWithToken);
+        await updateCollectorConfig(configToSave);
+        // Update local state to reflect enforced values
+        setCollectorConfig(configToSave);
 
         // Notify other windows that collector config was saved
         localStorage.setItem("collector_config_saved", Date.now().toString());
@@ -804,18 +836,109 @@ export function Settings() {
                   </p>
                 </div>
 
-                {/* API Key Status */}
-                {geminiApiKeySet ? (
-                  <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
-                    <span className="text-green-800 font-medium">API key is configured</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                    <AlertCircle className="w-5 h-5 text-yellow-600" />
-                    <span className="text-yellow-800 font-medium">No API key configured at build time</span>
-                  </div>
-                )}
+                {/* API Key Management */}
+                <div className="bg-white p-4 rounded-lg border">
+                  <h3 className="font-semibold mb-3">API Key Configuration</h3>
+                  
+                  {geminiApiKeySet ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <CheckCircle className="w-5 h-5 text-green-600" />
+                        <span className="text-green-800 font-medium">API key is configured</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={() => {
+                            setShowApiKey(true);
+                            setGeminiApiKeyInput("");
+                          }}
+                          variant="outline"
+                          className="flex-1"
+                        >
+                          Change API Key
+                        </Button>
+                        <Button
+                          onClick={handleDeleteGeminiApiKey}
+                          variant="outline"
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <AlertCircle className="w-5 h-5 text-yellow-600" />
+                        <span className="text-yellow-800 font-medium">No API key configured</span>
+                      </div>
+                      <p className="text-sm text-gray-600">
+                        Enter your Google Gemini API key to enable AI video analysis. Get your key from{" "}
+                        <a
+                          href="https://ai.google.dev/"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-700 underline"
+                        >
+                          Google AI Studio
+                        </a>
+                        .
+                      </p>
+                    </div>
+                  )}
+                  
+                  {(showApiKey || !geminiApiKeySet) && (
+                    <div className="mt-4 space-y-3">
+                      <div>
+                        <label className="block text-sm font-medium mb-1">
+                          Gemini API Key
+                        </label>
+                        <input
+                          type="password"
+                          value={geminiApiKeyInput}
+                          onChange={(e) => setGeminiApiKeyInput(e.target.value)}
+                          onCopy={(e) => {
+                            e.preventDefault();
+                            e.clipboardData.setData('text/plain', '');
+                          }}
+                          onCut={(e) => {
+                            e.preventDefault();
+                            e.clipboardData.setData('text/plain', '');
+                          }}
+                          onContextMenu={(e) => {
+                            // Prevent right-click context menu to make copying harder
+                            e.preventDefault();
+                          }}
+                          placeholder="Enter your Gemini API key"
+                          className="w-full px-3 py-2 border rounded-lg font-mono text-sm"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Your API key is stored securely and never shared. The key cannot be copied from this field.
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={handleSaveGeminiApiKey}
+                          disabled={!geminiApiKeyInput.trim()}
+                          className="flex-1"
+                        >
+                          {geminiApiKeySet ? "Update" : "Save"} API Key
+                        </Button>
+                        {showApiKey && (
+                          <Button
+                            onClick={() => {
+                              setShowApiKey(false);
+                              setGeminiApiKeyInput("");
+                            }}
+                            variant="outline"
+                          >
+                            Cancel
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 {/* Enable/Disable */}
                 <div className="flex items-center justify-between bg-white p-4 rounded-lg border">
@@ -834,14 +957,6 @@ export function Settings() {
                   />
                 </div>
 
-                {!geminiApiKeySet && (
-                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start gap-2">
-                    <AlertCircle className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
-                    <p className="text-sm text-yellow-800">
-                      AI analysis requires an API key to be embedded at build time.
-                    </p>
-                  </div>
-                )}
 
                 {/* Queue Status */}
                 {geminiQueueStatus && (
@@ -999,62 +1114,24 @@ export function Settings() {
                 <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
                   <h3 className="font-semibold mb-2 text-blue-900">Cloud Data Sync</h3>
                   <p className="text-sm text-blue-700">
-                    Sync your activity data to the cloud for backup and cross-device access.
+                    Store your activity data
                   </p>
                 </div>
 
-                {/* Enable/Disable */}
+                {/* Enable/Disable - Always enabled, read-only */}
                 <div className="flex items-center justify-between bg-white p-4 rounded-lg border">
                   <div>
                     <label className="font-semibold">Enable Data Sync</label>
                     <p className="text-sm text-gray-600">
-                      Automatically sync activity data to the cloud
+                      Automatically sync activity data to the cloud (always enabled)
                     </p>
                   </div>
                   <input
                     type="checkbox"
-                    checked={collectorConfig.enabled}
-                    onChange={(e) => updateCollectorField("enabled", e.target.checked)}
-                    className="w-5 h-5"
+                    checked={true}
+                    disabled={true}
+                    className="w-5 h-5 opacity-50 cursor-not-allowed"
                   />
-                </div>
-
-                {/* Organization Selection */}
-                <div className="bg-white p-4 rounded-lg border">
-                  <label className="font-semibold block mb-1">
-                    Organization <span className="text-red-500">*</span>
-                  </label>
-                  {loadingUserData ? (
-                    <div className="w-full px-3 py-2 border rounded-lg bg-gray-50 flex items-center gap-2">
-                      <Loader className="w-4 h-4 animate-spin text-gray-400" />
-                      <span className="text-gray-500">Loading organisations...</span>
-                    </div>
-                  ) : organisations.length === 0 ? (
-                    <div className="w-full px-3 py-2 border rounded-lg bg-gray-50 text-gray-500">
-                      No organisations available. Please ensure you have access to at least one organisation.
-                    </div>
-                  ) : (
-                    <select
-                      value={collectorConfig.org_id}
-                      onChange={(e) => handleOrganisationSelect(e.target.value)}
-                      className="w-full px-3 py-2 border rounded-lg"
-                    >
-                      <option value="">Select an organisation...</option>
-                      {organisations.map((org) => (
-                        <option key={org.id} value={org.id}>
-                          {org.name} {org.description ? `- ${org.description}` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                  <p className="text-xs text-gray-500 mt-1">
-                    Select the organisation to use for data sync
-                  </p>
-                  {collectorConfig.org_id && (
-                    <div className="mt-2 p-2 bg-blue-50 rounded text-xs text-blue-700">
-                      <strong>Selected:</strong> {collectorConfig.org_name} (ID: {collectorConfig.org_id})
-                    </div>
-                  )}
                 </div>
 
                 {/* Test Connection Button */}
@@ -1083,7 +1160,7 @@ export function Settings() {
                 {/* Advanced Settings */}
                 {showAdvanced && (
                   <div className="space-y-4 pl-4 border-l-2 border-gray-200">
-                    {/* Server URL */}
+                    {/* Server URL - Read-only */}
                     <div className="bg-white p-4 rounded-lg border">
                       <label className="block text-sm font-medium mb-1">
                         Server URL
@@ -1091,12 +1168,15 @@ export function Settings() {
                       <input
                         type="text"
                         value={collectorConfig.server_url}
-                        onChange={(e) => updateCollectorField("server_url", e.target.value)}
-                        className="w-full px-3 py-2 border rounded-lg font-mono text-sm"
+                        disabled={true}
+                        className="w-full px-3 py-2 border rounded-lg font-mono text-sm bg-gray-50 text-gray-600 cursor-not-allowed"
                       />
+                      <p className="text-xs text-gray-500 mt-1">
+                        This setting cannot be changed
+                      </p>
                     </div>
 
-                    {/* Auth URL */}
+                    {/* Auth URL - Read-only */}
                     <div className="bg-white p-4 rounded-lg border">
                       <label className="block text-sm font-medium mb-1">
                         Authentication URL
@@ -1104,9 +1184,12 @@ export function Settings() {
                       <input
                         type="text"
                         value={collectorConfig.auth_url}
-                        onChange={(e) => updateCollectorField("auth_url", e.target.value)}
-                        className="w-full px-3 py-2 border rounded-lg font-mono text-sm"
+                        disabled={true}
+                        className="w-full px-3 py-2 border rounded-lg font-mono text-sm bg-gray-50 text-gray-600 cursor-not-allowed"
                       />
+                      <p className="text-xs text-gray-500 mt-1">
+                        This setting cannot be changed
+                      </p>
                     </div>
 
                     {/* Batch Settings */}

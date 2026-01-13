@@ -547,10 +547,10 @@ pub async fn get_recordings_by_date_range(
 // Gemini AI Integration Commands
 // =============================================================================
 
-// Check if Gemini API key is available (embedded or env var)
+// Check if Gemini API key is available (user-provided, env var, or embedded)
 #[tauri::command]
-pub async fn has_gemini_api_key() -> Result<bool, String> {
-    Ok(gemini::has_api_key())
+pub async fn has_gemini_api_key(app: AppHandle) -> Result<bool, String> {
+    Ok(gemini::has_api_key_with_app(&app))
 }
 
 // Get Gemini configuration
@@ -579,4 +579,46 @@ pub async fn update_gemini_config(
 #[tauri::command]
 pub async fn get_gemini_queue_status() -> Result<gemini::QueueStatus, String> {
     Ok(gemini::get_queue_status())
+}
+
+// Set Gemini API key (user-provided from settings)
+#[tauri::command]
+pub async fn set_gemini_api_key(
+    app: AppHandle,
+    api_key: String,
+) -> Result<(), String> {
+    // Validate that key is not empty
+    if api_key.trim().is_empty() {
+        return Err("API key cannot be empty".to_string());
+    }
+    
+    // Save to secure storage
+    config::save_gemini_api_key(&app, &api_key)?;
+    
+    log::info!("Gemini API key saved to secure storage");
+    Ok(())
+}
+
+// Get Gemini API key status (returns whether a key is set, not the key itself)
+#[tauri::command]
+pub async fn get_gemini_api_key_status(app: AppHandle) -> Result<bool, String> {
+    // Check if user-provided key exists
+    if let Ok(Some(key)) = config::load_gemini_api_key(&app) {
+        if !key.trim().is_empty() {
+            return Ok(true);
+        }
+    }
+    
+    // Fall back to checking env var and embedded key
+    Ok(gemini::has_api_key())
+}
+
+// Delete Gemini API key (remove user-provided key)
+#[tauri::command]
+pub async fn delete_gemini_api_key(
+    app: AppHandle,
+) -> Result<(), String> {
+    config::delete_gemini_api_key(&app)?;
+    log::info!("Gemini API key deleted from secure storage");
+    Ok(())
 }

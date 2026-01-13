@@ -373,8 +373,11 @@ async fn verify_watcher_health(base_url: &str) -> Result<bool, String> {
 }
 
 pub async fn wait_healthy(base_url: &str, timeout: Duration) -> bool {
-    let deadline = std::time::Instant::now() + timeout;
-    while std::time::Instant::now() < deadline {
+    let start = tokio::time::Instant::now();
+    let deadline = start + timeout;
+    let mut attempt = 0;
+    while tokio::time::Instant::now() < deadline {
+        attempt += 1;
         if let Ok(resp) = reqwest::Client::new()
             .get(format!("{}/api/0/info", base_url))
             .timeout(Duration::from_secs(2))
@@ -382,11 +385,22 @@ pub async fn wait_healthy(base_url: &str, timeout: Duration) -> bool {
             .await
         {
             if resp.status().is_success() {
+                if attempt > 1 {
+                    let elapsed = start.elapsed();
+                    log::info!("aw-server health check succeeded after {} attempts ({:.1}s)", attempt, elapsed.as_secs_f64());
+                }
                 return true;
             }
         }
+        // Log progress every 5 seconds (approximately every 16 attempts at 300ms intervals)
+        if attempt % 16 == 0 {
+            let elapsed = start.elapsed();
+            log::debug!("aw-server health check attempt {} (elapsed: {:.1}s)", attempt, elapsed.as_secs_f64());
+        }
         tokio::time::sleep(Duration::from_millis(300)).await;
     }
+    let elapsed = start.elapsed();
+    log::warn!("aw-server health check timed out after {} attempts ({:.1}s)", attempt, elapsed.as_secs_f64());
     false
 }
 
@@ -504,14 +518,20 @@ fn start_server_internal(
         })?;
         *AW_CHILD.lock().unwrap() = Some(child);
 
-        // Wait until healthy
-        if !wait_healthy(&base_url, Duration::from_secs(10)).await {
-            log::error!("aw-server failed to become healthy at {}", base_url);
+        // Give the process a moment to start before checking health
+        log::info!("Waiting for aw-server to start...");
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        // Wait until healthy (increased timeout to 30 seconds for slow starts)
+        log::info!("Checking aw-server health at {} (timeout: 30s)...", base_url);
+        if !wait_healthy(&base_url, Duration::from_secs(30)).await {
+            log::error!("aw-server failed to become healthy at {} after 30 seconds", base_url);
             return Err(format!(
-                "ActivityWatch server failed to become healthy at {}",
+                "ActivityWatch server failed to become healthy at {} (timeout: 30s)",
                 base_url
             ));
         }
+        log::info!("aw-server is healthy at {}", base_url);
 
             *AW_BASE_URL.lock().unwrap() = Some(base_url.clone());
             *AW_PORT.lock().unwrap() = Some(port);

@@ -71,13 +71,13 @@ export type SyncStatistics = {
  */
 export const DEFAULT_COLLECTOR_CONFIG: CollectorConfig = {
   enabled: false,
-  server_url: 'wss://collector-dev.mattpm.ai//time-series', //'wss://collector-dev.mattpm.ai/time-series', //
-  auth_url: 'https://collector-dev.mattpm.ai//mock-auth',//'https://collector-dev.mattpm.ai/mock-auth', //
-  user_name: '',
-  user_id: '',
-  org_name: '',
-  org_id: '',
-  account_id: '',
+  server_url: 'ws://localhost:8080/time-series', //'wss://collector-dev.mattpm.ai/time-series', //
+  auth_url: 'http://localhost:8080/mock-auth',//'https://collector-dev.mattpm.ai/mock-auth', //
+  user_name: 'Local',
+  user_id: '0',
+  org_name: 'Local',
+  org_id: '0',
+  account_id: '0',
   batch_max_size: 100,
   batch_max_interval_seconds: 60,
   retry_max_attempts: 5,

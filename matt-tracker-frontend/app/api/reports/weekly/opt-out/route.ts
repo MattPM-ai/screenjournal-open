@@ -27,14 +27,8 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL
 
 export async function POST(request: NextRequest) {
   try {
-    // Get token from request cookies (server-side)
+    // Get token from request cookies (server-side) - optional
     const token = request.cookies.get('accessToken')?.value
-    if (!token) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      )
-    }
 
     const body = await request.json()
     const { accountId, orgId } = body
@@ -55,12 +49,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Forward request to backend API
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    }
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
     const response = await fetch(`${BACKEND_URL}/api/reports/weekly/opt-out`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
+      headers,
       body: JSON.stringify({
         accountId,
         orgId,

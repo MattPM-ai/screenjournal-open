@@ -46,14 +46,18 @@ pub use queue::{submit_job, init_queue, shutdown_queue, get_queue_status, QueueS
  * Get the Gemini API key
  * 
  * # Priority
- * 1. GEMINI_API_KEY environment variable (for runtime override/testing)
- * 2. Embedded key from build time
+ * 1. User-provided key from secure storage (settings)
+ * 2. GEMINI_API_KEY environment variable (for runtime override/testing)
+ * 3. Embedded key from build time (backwards compatibility)
  * 
  * # Returns
  * * `Ok(String)` - The API key
  * * `Err(String)` - Error message if no key available
  */
 pub fn get_api_key() -> Result<String, String> {
+    // Check for user-provided key from secure storage (requires AppHandle)
+    // This is handled by get_api_key_with_app() which should be called when AppHandle is available
+    
     // Check for runtime environment variable override
     if let Ok(key) = std::env::var("GEMINI_API_KEY") {
         if !key.is_empty() {
@@ -65,6 +69,31 @@ pub fn get_api_key() -> Result<String, String> {
     // Fall back to embedded key
     log::debug!("Using embedded Gemini API key");
     embedded_key::get_embedded_key()
+}
+
+/**
+ * Get the Gemini API key with AppHandle (checks user-provided key first)
+ * 
+ * # Priority
+ * 1. User-provided key from secure storage (settings)
+ * 2. GEMINI_API_KEY environment variable (for runtime override/testing)
+ * 3. Embedded key from build time (backwards compatibility)
+ * 
+ * # Returns
+ * * `Ok(String)` - The API key
+ * * `Err(String)` - Error message if no key available
+ */
+pub fn get_api_key_with_app(app: &tauri::AppHandle) -> Result<String, String> {
+    // Check for user-provided key from secure storage first
+    if let Ok(Some(key)) = crate::recording::config::load_gemini_api_key(app) {
+        if !key.is_empty() {
+            log::debug!("Using Gemini API key from user settings");
+            return Ok(key);
+        }
+    }
+    
+    // Fall back to standard get_api_key() which checks env var and embedded key
+    get_api_key()
 }
 
 /**
@@ -83,4 +112,23 @@ pub fn has_api_key() -> bool {
     }
     // Fall back to checking embedded key
     embedded_key::has_embedded_key()
+}
+
+/**
+ * Check if API key is available with AppHandle (checks user-provided key first)
+ * 
+ * # Returns
+ * * `true` if an API key is available
+ * * `false` if no API key is configured
+ */
+pub fn has_api_key_with_app(app: &tauri::AppHandle) -> bool {
+    // Check for user-provided key from secure storage first
+    if let Ok(Some(key)) = crate::recording::config::load_gemini_api_key(app) {
+        if !key.is_empty() {
+            return true;
+        }
+    }
+    
+    // Fall back to standard has_api_key() which checks env var and embedded key
+    has_api_key()
 }

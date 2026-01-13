@@ -23,7 +23,6 @@ import { useEffect, useState, useRef } from 'react'
 
 interface WeeklyReportLoadingProps {
   formData: {
-    accountId: number
     users: Array<{ name: string; id: number }>
     org: string
     orgId: number
@@ -126,7 +125,6 @@ export default function WeeklyReportLoading({ formData, onComplete, onError }: W
    * Initiates weekly report generation
    */
   const generateReport = async (data: {
-    accountId: number
     users: Array<{ name: string; id: number }>
     org: string
     orgId: number

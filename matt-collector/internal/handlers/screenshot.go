@@ -17,15 +17,15 @@ import (
 
 // ScreenshotHandler handles screenshot upload requests
 type ScreenshotHandler struct {
-	s3Service     *services.S3Service
-	influxService *services.InfluxService
+	storageService services.StorageInterface
+	influxService  *services.InfluxService
 }
 
 // NewScreenshotHandler creates a new screenshot handler
-func NewScreenshotHandler(s3Service *services.S3Service, influxService *services.InfluxService) *ScreenshotHandler {
+func NewScreenshotHandler(storageService services.StorageInterface, influxService *services.InfluxService) *ScreenshotHandler {
 	return &ScreenshotHandler{
-		s3Service:     s3Service,
-		influxService: influxService,
+		storageService: storageService,
+		influxService:  influxService,
 	}
 }
 
@@ -95,17 +95,17 @@ func (h *ScreenshotHandler) UploadScreenshot(c *gin.Context) {
 		monitorIdx = idx
 	}
 
-	s3Key, err := h.s3Service.UploadScreenshot(c.Request.Context(), org, user, timestamp, monitorIdx, fileReader, file.Header.Get("Content-Type"))
+	storageKey, err := h.storageService.UploadScreenshot(c.Request.Context(), org, user, timestamp, monitorIdx, fileReader, file.Header.Get("Content-Type"))
 	if err != nil {
-		log.Printf("[DATA] Screenshot upload to S3 failed - %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to upload to S3: %v", err)})
+		log.Printf("[DATA] Screenshot upload failed - %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to upload screenshot: %v", err)})
 		return
 	}
 	
-	log.Printf("[DATA] Screenshot uploaded to S3 successfully - s3_key=%s", s3Key)
+	log.Printf("[DATA] Screenshot uploaded successfully - storage_key=%s", storageKey)
 
-	// Get the full S3 URL
-	s3URL := h.s3Service.GetFileURL(s3Key)
+	// Get the full storage URL
+	storageURL := h.storageService.GetFileURL(storageKey)
 
 	// Build tags with all metadata from JWT claims
 	tags := make(map[string]string)
@@ -156,30 +156,32 @@ func (h *ScreenshotHandler) UploadScreenshot(c *gin.Context) {
 
 	lineProtocol := fmt.Sprintf("screenshots,%s url=\"%s\",key=\"%s\" %d",
 		tagStr.String(),
-		s3URL,
-		s3Key,
+		storageURL,
+		storageKey,
 		timestamp.UnixNano(),
 	)
 
-	// Write to InfluxDB
-	if err := h.influxService.Write(c.Request.Context(), lineProtocol); err != nil {
-		// Log error but don't fail the request since file is already uploaded
-		c.JSON(http.StatusOK, gin.H{
-			"message":        "screenshot uploaded but failed to log to InfluxDB",
-			"s3_key":         s3Key,
-			"s3_url":         s3URL,
-			"influxdb_error": err.Error(),
-		})
-		return
+	// Write to InfluxDB (if available)
+	if h.influxService != nil {
+		if err := h.influxService.Write(c.Request.Context(), lineProtocol); err != nil {
+			// Log error but don't fail the request since file is already uploaded
+			c.JSON(http.StatusOK, gin.H{
+				"message":        "screenshot uploaded but failed to log to InfluxDB",
+				"storage_key":    storageKey,
+				"storage_url":    storageURL,
+				"influxdb_error": err.Error(),
+			})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":   "screenshot uploaded successfully",
-		"s3_key":    s3Key,
-		"s3_url":    s3URL,
-		"org":       org,
-		"user":      user,
-		"timestamp": timestamp.Unix(),
+		"message":     "screenshot uploaded successfully",
+		"storage_key": storageKey,
+		"storage_url": storageURL,
+		"org":         org,
+		"user":        user,
+		"timestamp":   timestamp.Unix(),
 	})
 }
 
@@ -256,13 +258,13 @@ func (h *ScreenshotHandler) GetScreenshotByUser(c *gin.Context) {
 	h.streamScreenshot(c, org, user, timestamp, monitorIdx)
 }
 
-// streamScreenshot streams a screenshot from S3 to the response
+// streamScreenshot streams a screenshot from storage to the response
 func (h *ScreenshotHandler) streamScreenshot(c *gin.Context, org, user string, timestamp int64, monitorIdx int) {
-	// Generate S3 key
-	s3Key := h.s3Service.GetScreenshotKey(org, user, timestamp, monitorIdx)
-	log.Printf("DEBUG: Streaming screenshot for key: %s", s3Key)
-	// Get object from S3
-	body, contentType, err := h.s3Service.GetObject(c.Request.Context(), s3Key)
+	// Generate storage key
+	storageKey := h.storageService.GetScreenshotKey(org, user, timestamp, monitorIdx)
+	log.Printf("DEBUG: Streaming screenshot for key: %s", storageKey)
+	// Get object from storage
+	body, contentType, err := h.storageService.GetObject(c.Request.Context(), storageKey)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "screenshot not found"})
 		return

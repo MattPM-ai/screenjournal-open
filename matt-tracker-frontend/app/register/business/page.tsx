@@ -53,8 +53,8 @@ export default function BusinessRegisterPage() {
         password: formData.password
       });
       
-      // Redirect to profile page after successful business registration
-      router.push('/profile');
+      // Redirect to home page after successful business registration
+      router.push('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
     } finally {

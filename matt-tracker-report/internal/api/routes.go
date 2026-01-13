@@ -1,8 +1,6 @@
 package api
 
 import (
-	"matt-tracker-report/internal/middleware"
-
 	"github.com/gin-gonic/gin"
 )
 
@@ -13,12 +11,10 @@ func SetupRoutes(handlers *Handlers) *gin.Engine {
 	// Add CORS middleware
 	router.Use(corsMiddleware())
 
-	// API routes
+	// API routes (no authentication required)
 	api := router.Group("/api")
 	{
-		// Apply authentication middleware to all report routes
 		reports := api.Group("/reports")
-		reports.Use(middleware.AuthenticateUser())
 		{
 			reports.POST("/generate", handlers.GenerateReportHandler)
 			reports.POST("/generate-sync", handlers.GenerateReportSyncHandler)

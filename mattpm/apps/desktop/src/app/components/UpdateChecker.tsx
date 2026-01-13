@@ -39,12 +39,26 @@ export function UpdateChecker() {
   const [progress, setProgress] = useState<number>(0);
   const [error, setError] = useState<string>("");
   const [dismissed, setDismissed] = useState(false);
+  const [isTauri, setIsTauri] = useState(false);
+
+  // Check if we're in Tauri runtime (only in browser, not SSR)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && typeof (window as any).__TAURI_INTERNALS__ !== 'undefined') {
+      setIsTauri(true);
+    }
+  }, []);
 
   /**
    * Check for updates on mount
    * Delays 5 seconds to avoid blocking app startup
+   * Only runs in Tauri runtime (not in Next.js dev server)
    */
   useEffect(() => {
+    // Only run in Tauri runtime
+    if (!isTauri) {
+      return; // Not in Tauri context, skip update checking
+    }
+
     const checkUpdate = async () => {
       // Wait 5 seconds after app launch before checking
       await new Promise((resolve) => setTimeout(resolve, 5000));
@@ -67,7 +81,12 @@ export function UpdateChecker() {
     };
 
     checkUpdate();
-  }, []);
+  }, [isTauri]);
+
+  // Don't render anything if not in Tauri context
+  if (!isTauri) {
+    return null;
+  }
 
   /**
    * Handle download button click

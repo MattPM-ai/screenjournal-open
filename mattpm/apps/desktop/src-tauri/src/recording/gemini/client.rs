@@ -134,6 +134,7 @@ pub async fn analyze_video(
     video_duration_seconds: f64,
     segment_start_time: &str,
     config: &GeminiConfig,
+    app: Option<&tauri::AppHandle>,
 ) -> Result<TimelineAnalysis, GeminiError> {
     log::info!(
         "Starting Gemini analysis for segment {} display {} ({:.1}s video)",
@@ -142,10 +143,16 @@ pub async fn analyze_video(
         video_duration_seconds
     );
 
-    // Get API key (from env var or embedded)
-    let api_key = super::get_api_key().map_err(|e| GeminiError::Permanent {
-        message: e,
-    })?;
+    // Get API key (check user-provided key first if AppHandle is available)
+    let api_key = if let Some(app_handle) = app {
+        super::get_api_key_with_app(app_handle).map_err(|e| GeminiError::Permanent {
+            message: e,
+        })?
+    } else {
+        super::get_api_key().map_err(|e| GeminiError::Permanent {
+            message: e,
+        })?
+    };
 
     // Read and encode video file
     let video_data = read_and_encode_video(video_path).map_err(|e| GeminiError::Permanent {

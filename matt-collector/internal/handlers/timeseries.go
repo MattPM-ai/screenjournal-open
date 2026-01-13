@@ -264,28 +264,33 @@ func (h *TimeSeriesHandler) handleMessages(conn *websocket.Conn, session *Sessio
 			}
 			log.Printf("[DATA] Line protocol preview: %s", linePreview)
 
-			// Write to InfluxDB with all metadata tags
+			// Write to InfluxDB with all metadata tags (if available)
 			// user and org tags should be names, not IDs
-			err = h.influxService.WriteLineProtocolWithDetails(
-				ctx,
-				lineProtocol,
-				session.UserName,  // user (display name)
-				session.OrgName,   // org (display name)
-				session.UserID,    // user_id
-				session.OrgID,     // org_id
-				session.AccountID, // account_id
-				session.UserName,  // user_name (same as user tag)
-				session.OrgName,   // org_name (same as org tag)
-			)
-			if err != nil {
-				log.Printf("[ERROR] Failed to write to InfluxDB: %v", err)
-				log.Printf("[ERROR] Problematic line protocol: %q", lineProtocol)
-				log.Printf("[ERROR] User: %q, Org: %q, UserID: %q, OrgID: %q, AccountID: %q",
-					session.User, session.Org, session.UserID, session.OrgID, session.AccountID)
-				// Send error back to client
-				errMsg := fmt.Sprintf("ERROR: %v", err)
-				conn.WriteMessage(websocket.TextMessage, []byte(errMsg))
-				continue
+			if h.influxService != nil {
+				err = h.influxService.WriteLineProtocolWithDetails(
+					ctx,
+					lineProtocol,
+					session.UserName,  // user (display name)
+					session.OrgName,   // org (display name)
+					session.UserID,    // user_id
+					session.OrgID,     // org_id
+					session.AccountID, // account_id
+					session.UserName,  // user_name (same as user tag)
+					session.OrgName,   // org_name (same as org tag)
+				)
+				if err != nil {
+					log.Printf("[ERROR] Failed to write to InfluxDB: %v", err)
+					log.Printf("[ERROR] Problematic line protocol: %q", lineProtocol)
+					log.Printf("[ERROR] User: %q, Org: %q, UserID: %q, OrgID: %q, AccountID: %q",
+						session.User, session.Org, session.UserID, session.OrgID, session.AccountID)
+					// Send error back to client
+					errMsg := fmt.Sprintf("ERROR: %v", err)
+					conn.WriteMessage(websocket.TextMessage, []byte(errMsg))
+					continue
+				}
+			} else {
+				log.Printf("[WARN] InfluxDB not available - data received but not persisted: type=%s, user=%s, org=%s",
+					measurementType, session.User, session.Org)
 			}
 
 			// Send acknowledgment

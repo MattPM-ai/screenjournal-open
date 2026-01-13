@@ -34,14 +34,8 @@ export async function GET(
   { params }: { params: { taskId: string } }
 ) {
   try {
-    // Get token from request cookies (server-side)
+    // Get token from request cookies (server-side) - optional
     const token = request.cookies.get('accessToken')?.value
-    if (!token) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      )
-    }
 
     const { taskId } = params
 
@@ -54,12 +48,15 @@ export async function GET(
 
     // Poll backend API for status
     // Use cache: 'no-store' to ensure we always get fresh data from the backend
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    }
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
     const response = await fetch(`${BACKEND_URL}/api/reports/status/${taskId}`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
+      headers,
       cache: 'no-store',
     })
 

@@ -38,6 +38,9 @@ pub fn run() {
             crate::recording::manager::get_gemini_config,
             crate::recording::manager::update_gemini_config,
             crate::recording::manager::get_gemini_queue_status,
+            crate::recording::manager::set_gemini_api_key,
+            crate::recording::manager::get_gemini_api_key_status,
+            crate::recording::manager::delete_gemini_api_key,
             // Collector commands
             crate::collector::manager::start_collector,
             crate::collector::manager::stop_collector,
@@ -46,6 +49,7 @@ pub fn run() {
             crate::collector::manager::get_collector_config,
             crate::collector::manager::test_collector_connection,
             crate::collector::manager::update_collector_app_jwt_token,
+            crate::collector::manager::trigger_daily_collection,
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {

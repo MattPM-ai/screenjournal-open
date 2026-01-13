@@ -8,10 +8,43 @@
  * Dependencies:
  * - @tauri-apps/plugin-updater: Update checking and installation
  * - @tauri-apps/plugin-process: Application relaunch after update
+ * 
+ * Note: These plugins only work in Tauri runtime, not in Next.js dev server
  */
 
-import { check } from '@tauri-apps/plugin-updater';
-import { relaunch } from '@tauri-apps/plugin-process';
+// Dynamically import Tauri plugins to avoid SSR issues
+// These will only be loaded in Tauri runtime, not during SSR
+let updaterModule: typeof import('@tauri-apps/plugin-updater') | null = null;
+let processModule: typeof import('@tauri-apps/plugin-process') | null = null;
+
+// Check if we're in Tauri runtime (not SSR or Next.js dev server)
+function isTauriRuntime(): boolean {
+  if (typeof window === 'undefined') {
+    return false; // SSR context
+  }
+  return typeof (window as any).__TAURI_INTERNALS__ !== 'undefined';
+}
+
+// Lazy load plugins only when needed and in Tauri context
+async function loadPlugins() {
+  // Only run in Tauri runtime
+  if (!isTauriRuntime()) {
+    return false;
+  }
+  
+  try {
+    if (!updaterModule) {
+      updaterModule = await import('@tauri-apps/plugin-updater');
+    }
+    if (!processModule) {
+      processModule = await import('@tauri-apps/plugin-process');
+    }
+    return true;
+  } catch (error) {
+    // Plugins not available
+    return false;
+  }
+}
 
 /**
  * Update status information returned by checkForUpdate
@@ -46,8 +79,14 @@ export type ProgressCallback = (downloaded: number, total: number) => void;
  * @throws Error if the update check fails (network error, invalid response, etc.)
  */
 export async function checkForUpdate(): Promise<UpdateStatus> {
+  // Load plugins if not already loaded
+  const pluginsAvailable = await loadPlugins();
+  if (!pluginsAvailable || !updaterModule) {
+    return { available: false };
+  }
+
   try {
-    const update = await check();
+    const update = await updaterModule.check();
     
     if (update) {
       return {
@@ -62,7 +101,8 @@ export async function checkForUpdate(): Promise<UpdateStatus> {
     return { available: false };
   } catch (error) {
     console.error('[UPDATER] Failed to check for updates:', error);
-    throw error;
+    // Return no update available instead of throwing in dev mode
+    return { available: false };
   }
 }
 
@@ -78,7 +118,13 @@ export async function checkForUpdate(): Promise<UpdateStatus> {
 export async function downloadAndInstall(
   onProgress?: ProgressCallback
 ): Promise<void> {
-  const update = await check();
+  // Load plugins if not already loaded
+  const pluginsAvailable = await loadPlugins();
+  if (!pluginsAvailable || !updaterModule || !processModule) {
+    throw new Error('Update functionality is only available in Tauri runtime');
+  }
+
+  const update = await updaterModule.check();
   
   if (!update) {
     throw new Error('No update available');
@@ -108,6 +154,6 @@ export async function downloadAndInstall(
   console.log('[UPDATER] Update installed, relaunching application...');
   
   // Relaunch the app to apply the update
-  await relaunch();
+  await processModule.relaunch();
 }
 

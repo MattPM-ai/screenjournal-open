@@ -29,7 +29,7 @@ use std::sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex};
 use std::time::Duration;
 use tauri::AppHandle;
 use tokio::task::JoinHandle;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 
 // Global background task handle
 static BACKGROUND_HANDLE: Lazy<Mutex<Option<JoinHandle<()>>>> = 
@@ -37,6 +37,10 @@ static BACKGROUND_HANDLE: Lazy<Mutex<Option<JoinHandle<()>>>> =
 
 // ActivityWatch polling task handle
 static AW_POLLING_HANDLE: Lazy<Mutex<Option<JoinHandle<()>>>> = 
+    Lazy::new(|| Mutex::new(None));
+
+// Daily metrics collection task handle
+static DAILY_METRICS_HANDLE: Lazy<Mutex<Option<JoinHandle<()>>>> = 
     Lazy::new(|| Mutex::new(None));
 
 // Shutdown signal for background task
@@ -402,6 +406,135 @@ async fn activitywatch_polling_task(app_handle: AppHandle) {
 }
 
 /**
+ * Background task to collect daily metrics periodically
+ * Collects metrics for the current day every hour
+ */
+async fn daily_metrics_collection_task(app_handle: AppHandle) {
+    let collection_interval = Duration::from_secs(3600); // Collect every hour
+    
+    log::info!("[DAILY_METRICS_TASK] Starting daily metrics collection task");
+    
+    // Initial delay to allow ActivityWatch to be ready (reduced from 60s to 5s)
+    tokio::time::sleep(Duration::from_secs(5)).await;
+    
+    loop {
+        // Check shutdown signal
+        if SHUTDOWN_SIGNAL.load(Ordering::Relaxed) {
+            break;
+        }
+        
+        // Check if collector is enabled
+        if !config::is_enabled() {
+            log::debug!("[DAILY_METRICS_TASK] Collector disabled, skipping collection");
+            tokio::time::sleep(collection_interval).await;
+            continue;
+        }
+        
+        // Get ActivityWatch base URL
+        let base_url_opt = {
+            aw_manager::AW_BASE_URL.lock().unwrap().clone()
+        };
+        
+        let base_url = match base_url_opt {
+            Some(url) => url,
+            None => {
+                log::debug!("[DAILY_METRICS_TASK] ActivityWatch base URL not available, skipping collection");
+                tokio::time::sleep(collection_interval).await;
+                continue;
+            }
+        };
+        
+        // Check if server is healthy
+        let healthy = aw_manager::wait_healthy(&base_url, Duration::from_secs(1)).await;
+        if !healthy {
+            log::debug!("[DAILY_METRICS_TASK] ActivityWatch server not healthy, skipping collection");
+            tokio::time::sleep(collection_interval).await;
+            continue;
+        }
+        
+        log::info!("[DAILY_METRICS_TASK] Starting collection cycle");
+        
+        // Get current date (today)
+        let today = Utc::now().date_naive();
+        let date_str = today.format("%Y-%m-%d").to_string();
+        
+        // Calculate start and end times for today (00:00:00 to 23:59:59)
+        let start_time = match today.and_hms_opt(0, 0, 0)
+            .and_then(|dt| dt.and_local_timezone(Utc).single())
+        {
+            Some(dt) => dt,
+            None => {
+                log::warn!("Failed to create start time for {}, skipping collection", date_str);
+                tokio::time::sleep(collection_interval).await;
+                continue;
+            }
+        };
+        
+        let end_time = match today.and_hms_opt(23, 59, 59)
+            .and_then(|dt| dt.and_local_timezone(Utc).single())
+        {
+            Some(dt) => dt,
+            None => {
+                log::warn!("Failed to create end time for {}, skipping collection", date_str);
+                tokio::time::sleep(collection_interval).await;
+                continue;
+            }
+        };
+        
+        // Calculate daily metrics for today
+        log::info!("[DAILY_METRICS_TASK] Calculating daily metrics for {}", date_str);
+        match aw_client::calculate_daily_metrics(&base_url, today).await {
+            Ok(metrics) => {
+                log::info!("[DAILY_METRICS_TASK] Calculated daily metrics: active={}s, idle={}s, afk={}s, utilization={}, switches={}",
+                    metrics.total_active_seconds, metrics.total_idle_seconds, 
+                    metrics.total_afk_seconds, metrics.utilization_ratio, metrics.app_switches);
+                // Send metrics to collector
+                if let Err(e) = bridge::collect_daily_metrics(&app_handle, &metrics) {
+                    log::error!("[DAILY_METRICS_TASK] Failed to collect daily metrics for {}: {}", date_str, e);
+                } else {
+                    log::info!("[DAILY_METRICS_TASK] Successfully collected daily metrics for {}", date_str);
+                }
+            }
+            Err(e) => {
+                log::error!("[DAILY_METRICS_TASK] Failed to calculate daily metrics for {}: {}", date_str, e);
+            }
+        }
+        
+        // Collect app usage for today
+        log::info!("[DAILY_METRICS_TASK] Aggregating app usage for {}", date_str);
+        match aw_client::aggregate_app_usage(&base_url, start_time, end_time).await {
+            Ok(app_usage) => {
+                log::info!("[DAILY_METRICS_TASK] Aggregated {} apps", app_usage.len());
+                // Format end time as ISO 8601 string for the collector
+                let end_time_str = end_time.to_rfc3339();
+                // Send app usage to collector
+                if let Err(e) = bridge::collect_app_usage(&app_handle, &app_usage, &end_time_str) {
+                    log::error!("[DAILY_METRICS_TASK] Failed to collect app usage for {}: {}", date_str, e);
+                } else {
+                    log::info!("[DAILY_METRICS_TASK] Successfully collected app usage for {} ({} apps)", date_str, app_usage.len());
+                }
+            }
+            Err(e) => {
+                log::error!("[DAILY_METRICS_TASK] Failed to aggregate app usage for {}: {}", date_str, e);
+            }
+        }
+        
+        log::info!("[DAILY_METRICS_TASK] Collection cycle complete, flushing batch to ensure data is sent");
+        
+        // Flush the batch to ensure daily metrics and app usage are sent immediately
+        if let Ok(Some(_batch)) = batch::flush() {
+            log::info!("[DAILY_METRICS_TASK] Batch flushed successfully");
+        } else {
+            log::warn!("[DAILY_METRICS_TASK] Failed to flush batch");
+        }
+        
+        log::info!("[DAILY_METRICS_TASK] Sleeping for {} seconds until next collection", collection_interval.as_secs());
+        // Sleep before next collection
+        tokio::time::sleep(collection_interval).await;
+    }
+}
+
+/**
  * ============================================================================
  * TAURI COMMANDS
  * ============================================================================
@@ -473,6 +606,18 @@ pub async fn start_collector(
         *aw_handle_guard = Some(aw_handle);
     }
 
+    // Spawn daily metrics collection task
+    let app_clone3 = app.clone();
+    let metrics_handle = tokio::spawn(async move {
+        daily_metrics_collection_task(app_clone3).await;
+    });
+
+    // Store daily metrics task handle
+    {
+        let mut metrics_handle_guard = DAILY_METRICS_HANDLE.lock().unwrap();
+        *metrics_handle_guard = Some(metrics_handle);
+    }
+
     log::info!("Collector started successfully");
     Ok(())
 }
@@ -494,6 +639,102 @@ pub async fn update_collector_app_jwt_token(token: Option<String>) -> Result<(),
     
     config::update_app_jwt_token(token);
     Ok(())
+}
+
+/**
+ * Manually trigger daily metrics and app usage collection
+ * Useful for testing or immediate data collection
+ */
+#[tauri::command]
+pub async fn trigger_daily_collection(app: AppHandle) -> Result<String, String> {
+    log::info!("[TRIGGER_COLLECTION] Manual daily collection triggered");
+    
+    // Check if collector is enabled
+    if !config::is_enabled() {
+        return Err("Collector is not enabled".to_string());
+    }
+    
+    // Get ActivityWatch base URL
+    let base_url_opt = {
+        aw_manager::AW_BASE_URL.lock().unwrap().clone()
+    };
+    
+    let base_url = match base_url_opt {
+        Some(url) => url,
+        None => {
+            return Err("ActivityWatch base URL not available".to_string());
+        }
+    };
+    
+    // Check if server is healthy
+    let healthy = aw_manager::wait_healthy(&base_url, Duration::from_secs(5)).await;
+    if !healthy {
+        return Err("ActivityWatch server is not healthy".to_string());
+    }
+    
+    // Get current date (today)
+    let today = Utc::now().date_naive();
+    let date_str = today.format("%Y-%m-%d").to_string();
+    
+    // Calculate start and end times for today (00:00:00 to 23:59:59)
+    let start_time = match today.and_hms_opt(0, 0, 0)
+        .and_then(|dt| dt.and_local_timezone(Utc).single())
+    {
+        Some(dt) => dt,
+        None => {
+            return Err(format!("Failed to create start time for {}", date_str));
+        }
+    };
+    
+    let end_time = match today.and_hms_opt(23, 59, 59)
+        .and_then(|dt| dt.and_local_timezone(Utc).single())
+    {
+        Some(dt) => dt,
+        None => {
+            return Err(format!("Failed to create end time for {}", date_str));
+        }
+    };
+    
+    let mut results = Vec::new();
+    
+    // Calculate daily metrics for today
+    match aw_client::calculate_daily_metrics(&base_url, today).await {
+        Ok(metrics) => {
+            if let Err(e) = bridge::collect_daily_metrics(&app, &metrics) {
+                results.push(format!("Failed to collect daily metrics: {}", e));
+            } else {
+                results.push(format!("Collected daily metrics: active={}s, idle={}s, afk={}s", 
+                    metrics.total_active_seconds, metrics.total_idle_seconds, metrics.total_afk_seconds));
+            }
+        }
+        Err(e) => {
+            results.push(format!("Failed to calculate daily metrics: {}", e));
+        }
+    }
+    
+    // Collect app usage for today
+    match aw_client::aggregate_app_usage(&base_url, start_time, end_time).await {
+        Ok(app_usage) => {
+            let end_time_str = end_time.to_rfc3339();
+            if let Err(e) = bridge::collect_app_usage(&app, &app_usage, &end_time_str) {
+                results.push(format!("Failed to collect app usage: {}", e));
+            } else {
+                results.push(format!("Collected app usage: {} apps", app_usage.len()));
+            }
+        }
+        Err(e) => {
+            results.push(format!("Failed to aggregate app usage: {}", e));
+        }
+    }
+    
+    // Flush the batch to ensure data is sent immediately
+    if let Ok(Some(_batch)) = batch::flush() {
+        results.push("Batch flushed successfully".to_string());
+    } else {
+        results.push("Failed to flush batch".to_string());
+    }
+    
+    Ok(results.join("; "))
 }
 
 /**
@@ -524,6 +765,27 @@ pub async fn stop_collector() -> Result<(), String> {
             }
             Err(_) => {
                 log::warn!("ActivityWatch polling task stop timeout");
+            }
+        }
+    }
+
+    // Wait for daily metrics collection task to complete
+    let metrics_handle_opt = {
+        let mut metrics_handle_guard = DAILY_METRICS_HANDLE.lock().unwrap();
+        metrics_handle_guard.take()
+    };
+
+    if let Some(metrics_handle) = metrics_handle_opt {
+        let timeout_duration = Duration::from_secs(5);
+        match tokio::time::timeout(timeout_duration, metrics_handle).await {
+            Ok(Ok(())) => {
+                log::info!("Daily metrics collection task stopped cleanly");
+            }
+            Ok(Err(e)) => {
+                log::error!("Daily metrics collection task panicked: {:?}", e);
+            }
+            Err(_) => {
+                log::warn!("Daily metrics collection task stop timeout");
             }
         }
     }
@@ -607,9 +869,16 @@ pub async fn get_collector_status(app: AppHandle) -> Result<types::SyncStatistic
 #[tauri::command]
 pub async fn update_collector_config(
     app: AppHandle,
-    config: config::CollectorConfig,
+    mut config: config::CollectorConfig,
 ) -> Result<(), String> {
     log::info!("Updating collector configuration");
+
+    // Always enforce default values for user/org fields
+    config.user_name = "Local".to_string();
+    config.user_id = "0".to_string();
+    config.org_name = "Local".to_string();
+    config.org_id = "0".to_string();
+    config.account_id = "0".to_string();
 
     // Validate configuration
     config.validate()?;

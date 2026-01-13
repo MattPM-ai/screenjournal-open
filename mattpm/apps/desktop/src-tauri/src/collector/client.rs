@@ -106,8 +106,18 @@ impl CollectorClient {
 
         let (ws_stream, response) = timeout(timeout_duration, connect_future)
             .await
-            .map_err(|_| "Connection timeout".to_string())?
-            .map_err(|e| format!("WebSocket connection failed: {}", e))?;
+            .map_err(|_| format!("Connection timeout after {} seconds. Is the collector server running at {}?", 
+                self.config.connection_timeout_seconds, self.config.server_url))?
+            .map_err(|e| {
+                let error_msg = format!("WebSocket connection failed: {}", e);
+                // Provide helpful error message for connection refused
+                if error_msg.contains("Connection refused") || error_msg.contains("os error 61") {
+                    format!("Connection refused. Please ensure the collector server is running at {}. Start it with: cd matt-collector && go run ./cmd/server", 
+                        self.config.server_url)
+                } else {
+                    error_msg
+                }
+            })?;
 
         log::info!("WebSocket connected, status: {}", response.status());
 

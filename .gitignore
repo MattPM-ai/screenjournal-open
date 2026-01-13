@@ -80,6 +80,17 @@ coverage/
 *.sqlite
 *.sqlite3
 
+# Local storage (screenshots and files)
+storage/
+*/storage/
+**/storage/
+
+# Embedded database files
+data/
+*.db
+*.db-shm
+*.db-wal
+
 # Backup files
 *.bak
 *.backup
@@ -92,4 +103,5 @@ coverage/
 # - matt-tracker-report/.gitignore
 # - mattpm/.gitignore
 # ============================================================================
+
 

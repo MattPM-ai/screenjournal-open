@@ -21,7 +21,7 @@ import {
   getDefaultCategories,
 } from "@/lib/activityProcessor";
 import { Button, cn } from "@repo/ui";
-import { Play, Pause, Loader, Camera, Settings as SettingsIcon, User as UserIcon } from "lucide-react";
+import { Play, Pause, Loader, Camera, Settings as SettingsIcon } from "lucide-react";
 import { message } from '@tauri-apps/plugin-dialog';
 import { CurrentStatusCard } from "./components/CurrentStatusCard";
 import { DailyMetricsBar } from "./components/DailyMetricsBar";
@@ -30,13 +30,10 @@ import { AppUsageList } from "./components/AppUsageList";
 import { DateSelector } from "./components/DateSelector";
 import { SegmentDetailPanel } from "./components/SegmentDetailPanel";
 import { PrivacyNotice } from "./components/PrivacyNotice";
-import { LoginScreen } from "./components/LoginScreen";
 import { RecordingViewer } from "./components/RecordingViewer";
 import { CollectorStatus } from "./components/CollectorStatus";
-import { isAuthenticatedSync, checkAuthentication } from "@/lib/authAPI";
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { listen } from '@tauri-apps/api/event';
 import {
   getCollectorStatus,
   SyncStatistics,
@@ -88,12 +85,6 @@ export default function Home() {
 
   // Privacy notice state
   const [showPrivacyNotice, setShowPrivacyNotice] = useState<boolean>(false);
-  
-  // Login screen state
-  const [showLoginScreen, setShowLoginScreen] = useState<boolean>(false);
-  
-  // Authentication state
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
 
   // Recording viewer state
   const [showRecordingViewer, setShowRecordingViewer] = useState<boolean>(false);
@@ -305,53 +296,22 @@ export default function Home() {
     }
   };
 
-  // Check if login screen should be shown
-  const checkLoginScreen = async () => {
-    // Check if user is authenticated using JWT tokens
-    const isAuth = isAuthenticatedSync();
-    if (!isAuth) {
-      // Try async check with token refresh
-      const asyncAuth = await checkAuthentication();
-      if (!asyncAuth) {
-        setShowLoginScreen(true);
-        setIsLoggedIn(false);
-      } else {
-        setIsLoggedIn(true);
-      }
-    } else {
-      setIsLoggedIn(true);
-    }
-  };
-
   // Check if privacy notice should be shown
   const checkPrivacyNotice = async () => {
     const dismissed = localStorage.getItem("privacy_notice_dismissed");
     if (!dismissed) {
       setShowPrivacyNotice(true);
-    } else {
-      // Privacy notice already dismissed, check if login is needed
-      await checkLoginScreen();
     }
   };
 
   // Handle privacy notice dismiss
   const handlePrivacyDismiss = async () => {
     setShowPrivacyNotice(false);
-    // After privacy is dismissed, check if login is needed
-    await checkLoginScreen();
   };
 
   const handlePrivacyDontShowAgain = async () => {
     localStorage.setItem("privacy_notice_dismissed", "true");
     setShowPrivacyNotice(false);
-    // After privacy is dismissed, check if login is needed
-    await checkLoginScreen();
-  };
-
-  // Handle login completion
-  const handleLogin = () => {
-    setShowLoginScreen(false);
-    setIsLoggedIn(true);
   };
 
   /**
@@ -389,40 +349,6 @@ export default function Home() {
     }
   };
 
-  /**
-   * Open profile in a new window
-   * Prevents multiple profile windows by checking if one already exists
-   */
-  const openProfileWindow = async () => {
-    try {
-      // Check if profile window already exists
-      const existingWindow = await WebviewWindow.getByLabel("profile");
-      if (existingWindow) {
-        // Focus existing window
-        await existingWindow.setFocus();
-        return;
-      }
-
-      // Create new profile window
-      const profileWindow = new WebviewWindow("profile", {
-        url: "/profile",
-        title: "Profile",
-        width: 600,
-        height: 700,
-        minWidth: 500,
-        minHeight: 400,
-        resizable: true,
-        center: true,
-      });
-
-      // Handle window creation errors
-      profileWindow.once("tauri://error", (e) => {
-        console.error("Failed to create profile window:", e);
-      });
-    } catch (error) {
-      console.error("Error opening profile window:", error);
-    }
-  };
 
   // Server status polling (every 2 seconds)
   useEffect(() => {
@@ -452,45 +378,8 @@ export default function Home() {
     loadAppCategories();
     loadDashboardSettings();
     checkPrivacyNotice();
-    // Check initial login state
-    setIsLoggedIn(isAuthenticatedSync());
   }, []);
 
-  // Listen for authentication state changes
-  useEffect(() => {
-    const handleAuthStateChange = () => {
-      setIsLoggedIn(isAuthenticatedSync());
-    };
-
-    window.addEventListener("authStateChange", handleAuthStateChange);
-    return () => {
-      window.removeEventListener("authStateChange", handleAuthStateChange);
-    };
-  }, []);
-
-  // Listen for logout event from profile window
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-
-    const setupLogoutListener = async () => {
-      try {
-        unlisten = await listen('logout-requested', () => {
-          // Redirect to login page when logout is requested from profile window
-          window.location.href = "/";
-        });
-      } catch (error) {
-        console.error("Failed to setup logout listener:", error);
-      }
-    };
-
-    setupLogoutListener();
-
-    return () => {
-      if (unlisten) {
-        unlisten();
-      }
-    };
-  }, []);
 
   // Close splash screen after minimum display time (1.2 seconds)
   useEffect(() => {
@@ -719,15 +608,6 @@ export default function Home() {
         </div>
         <div className="absolute bottom-3 left-4 flex items-center gap-2">
           <CollectorStatus statistics={collectorStatus} />
-          {isLoggedIn && (
-            <button
-              onClick={openProfileWindow}
-              className="flex items-center gap-1 p-1.5 bg-gray-100 rounded-full cursor-pointer hover:bg-gray-200 transition-colors duration-200"
-              title="Profile"
-            >
-              <UserIcon className="w-3.5 h-3.5" />
-            </button>
-          )}
           <button
             onClick={openSettingsWindow}
             className="flex items-center gap-1 p-1.5 bg-gray-100 rounded-full cursor-pointer hover:bg-gray-200 transition-colors duration-200"
@@ -865,10 +745,6 @@ export default function Home() {
         />
       )}
 
-      {/* Login Screen (appears after privacy notice) */}
-      {showLoginScreen && !showPrivacyNotice && (
-        <LoginScreen onLogin={handleLogin} />
-      )}
     </main>
   );
 }

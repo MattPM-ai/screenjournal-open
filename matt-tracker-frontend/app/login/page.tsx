@@ -60,8 +60,8 @@ export default function LoginPage() {
         password: formData.password
       });
       
-      // Redirect to profile page after successful login
-      window.location.href = '/profile';
+      // Redirect to home page after successful login
+      window.location.href = '/';
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed. Please try again.');
     } finally {

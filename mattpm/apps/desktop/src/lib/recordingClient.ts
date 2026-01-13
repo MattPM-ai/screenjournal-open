@@ -242,10 +242,31 @@ export const DEFAULT_GEMINI_CONFIG: GeminiConfig = {
 };
 
 /**
- * Check if Gemini API key is available (embedded at build time or env var)
+ * Check if Gemini API key is available (user-provided, env var, or embedded at build time)
  */
 export async function hasGeminiApiKey(): Promise<boolean> {
   return await invoke('has_gemini_api_key');
+}
+
+/**
+ * Get Gemini API key status (whether a key is configured, not the key itself)
+ */
+export async function getGeminiApiKeyStatus(): Promise<boolean> {
+  return await invoke('get_gemini_api_key_status');
+}
+
+/**
+ * Set Gemini API key (user-provided from settings)
+ */
+export async function setGeminiApiKey(apiKey: string): Promise<void> {
+  return await invoke('set_gemini_api_key', { apiKey });
+}
+
+/**
+ * Delete Gemini API key (remove user-provided key)
+ */
+export async function deleteGeminiApiKey(): Promise<void> {
+  return await invoke('delete_gemini_api_key');
 }
 
 /**

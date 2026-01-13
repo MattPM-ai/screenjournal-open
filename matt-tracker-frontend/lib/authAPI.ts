@@ -115,7 +115,7 @@ const refreshToken = async (): Promise<string | null> => {
 }
 
 /**
- * Make authenticated request with automatic token refresh
+ * Make request with optional authentication token
  * 
  * INPUTS:
  * - url: string - The API endpoint URL
@@ -124,10 +124,9 @@ const refreshToken = async (): Promise<string | null> => {
  * OUTPUTS:
  * - Response - The fetch response
  * 
- * ERROR HANDLING:
- * - Automatically refreshes token on 401
- * - Retries request with new token
- * - Throws error if refresh fails
+ * DESCRIPTION:
+ * - Includes Authorization header if token is available
+ * - Works without authentication if no token is present
  */
 export const authenticatedFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
   let token = getAccessToken()
@@ -140,43 +139,47 @@ export const authenticatedFetch = async (url: string, options: RequestInit = {})
         const newToken = await refreshToken()
         if (newToken) {
           token = newToken
-        } else {
-          throw new Error('No access token available')
         }
       } catch (error) {
-        console.error('Token refresh failed:', error)
-        throw new Error('No access token available')
+        // Token refresh failed, continue without token
+        console.warn('Token refresh failed, continuing without authentication:', error)
       }
-    } else {
-      throw new Error('No access token available')
     }
   }
 
-  // Add token to headers
+  // Build headers - include Authorization only if token is available
+  const headers: HeadersInit = {
+      ...options.headers,
+      'Content-Type': 'application/json',
+  }
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+
+  // Make request
   const response = await fetch(url, {
     ...options,
-    headers: {
-      ...options.headers,
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
+    headers,
   })
 
-  // Handle token expiration
-  if (response.status === 401) {
-    const newToken = await refreshToken()
-    if (newToken) {
-      // Retry original request with new token
-      return fetch(url, {
-        ...options,
-        headers: {
-          ...options.headers,
-          'Authorization': `Bearer ${newToken}`,
-          'Content-Type': 'application/json',
-        },
-      })
-    } else {
-      throw new Error('Authentication failed - refresh token expired')
+  // Handle token expiration - try to refresh and retry once
+  if (response.status === 401 && token) {
+    try {
+      const newToken = await refreshToken()
+      if (newToken) {
+        // Retry original request with new token
+        return fetch(url, {
+          ...options,
+          headers: {
+            ...headers,
+            'Authorization': `Bearer ${newToken}`,
+          },
+        })
+      }
+    } catch (error) {
+      // Refresh failed, return original response
+      console.warn('Token refresh failed on 401, returning original response:', error)
     }
   }
 
@@ -659,3 +662,4 @@ export const generateReferralLink = async (accountId: number): Promise<string> =
     throw new Error('Failed to generate referral link')
   }
 }
+

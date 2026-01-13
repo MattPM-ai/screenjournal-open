@@ -107,13 +107,13 @@ impl Default for CollectorConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            server_url: "wss://collector-dev.mattpm.ai/time-series".to_string(), //"wss://collector-dev.mattpm.ai/time-series".to_string(), //
-            auth_url: "https://collector-dev.mattpm.ai/mock-auth".to_string(), //"https://collector-dev.mattpm.ai/mock-auth".to_string(), //
-            user_name: String::new(),
-            user_id: String::new(),
-            org_name: String::new(),
-            org_id: String::new(),
-            account_id: String::new(),
+            server_url: "ws://localhost:8080/time-series".to_string(), //"wss://collector-dev.mattpm.ai/time-series".to_string(), //
+            auth_url: "http://localhost:8080/mock-auth".to_string(), //"https://collector-dev.mattpm.ai/mock-auth".to_string(), //
+            user_name: "Local".to_string(),
+            user_id: "0".to_string(),
+            org_name: "Local".to_string(),
+            org_id: "0".to_string(),
+            account_id: "0".to_string(),
             batch_max_size: 100,
             batch_max_interval_seconds: 60,
             retry_max_attempts: 5,
@@ -248,13 +248,20 @@ pub fn load_config(app_handle: &AppHandle) -> Result<CollectorConfig, String> {
     let json_str = fs::read_to_string(&config_path)
         .map_err(|e| format!("Failed to read config file: {}", e))?;
 
-    let config: CollectorConfig = serde_json::from_str(&json_str)
+    let mut config: CollectorConfig = serde_json::from_str(&json_str)
         .map_err(|e| format!("Failed to parse config JSON: {}", e))?;
+
+    // Always enforce default values for user/org fields
+    config.user_name = "Local".to_string();
+    config.user_id = "0".to_string();
+    config.org_name = "Local".to_string();
+    config.org_id = "0".to_string();
+    config.account_id = "0".to_string();
 
     // Validate
     config.validate()?;
 
-    log::info!("Loaded collector config from {}", config_path.display());
+    log::info!("Loaded collector config from {} (with enforced defaults)", config_path.display());
     Ok(config)
 }
 
@@ -263,8 +270,16 @@ pub fn load_config(app_handle: &AppHandle) -> Result<CollectorConfig, String> {
  * Uses temporary file + rename to prevent corruption
  */
 pub fn save_config(app_handle: &AppHandle, config: &CollectorConfig) -> Result<(), String> {
+    // Create a copy with enforced defaults for user/org fields
+    let mut config_to_save = config.clone();
+    config_to_save.user_name = "Local".to_string();
+    config_to_save.user_id = "0".to_string();
+    config_to_save.org_name = "Local".to_string();
+    config_to_save.org_id = "0".to_string();
+    config_to_save.account_id = "0".to_string();
+    
     // Validate before saving
-    config.validate()?;
+    config_to_save.validate()?;
 
     let config_path = get_config_path(app_handle)?;
 
@@ -274,8 +289,8 @@ pub fn save_config(app_handle: &AppHandle, config: &CollectorConfig) -> Result<(
             .map_err(|e| format!("Failed to create config directory: {}", e))?;
     }
 
-    // Serialize to pretty JSON
-    let json_str = serde_json::to_string_pretty(config)
+    // Serialize to pretty JSON (using config with enforced defaults)
+    let json_str = serde_json::to_string_pretty(&config_to_save)
         .map_err(|e| format!("Failed to serialize config: {}", e))?;
 
     // Write to temporary file
@@ -294,11 +309,19 @@ pub fn save_config(app_handle: &AppHandle, config: &CollectorConfig) -> Result<(
 /**
  * Initialize config cache
  * Stores configuration in memory for fast access during event collection
+ * Always enforces default values for user/org fields
  */
 pub fn init_cache(config: CollectorConfig) {
     let mut cache = CACHED_CONFIG.write().unwrap();
-    *cache = Some(config.clone());
-    log::info!("Collector config cache initialized");
+    // Create a copy with enforced defaults for user/org fields
+    let mut config_with_defaults = config.clone();
+    config_with_defaults.user_name = "Local".to_string();
+    config_with_defaults.user_id = "0".to_string();
+    config_with_defaults.org_name = "Local".to_string();
+    config_with_defaults.org_id = "0".to_string();
+    config_with_defaults.account_id = "0".to_string();
+    *cache = Some(config_with_defaults);
+    log::info!("Collector config cache initialized (with enforced defaults)");
     if config.app_jwt_token.is_some() {
         log::info!("App JWT token included in cache (length: {})", config.app_jwt_token.as_ref().unwrap().len());
     } else {

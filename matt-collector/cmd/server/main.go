@@ -25,29 +25,35 @@ func main() {
 	// Initialize services
 	jwtService := services.NewJWTService(cfg.JWT.Secret)
 
-	influxService, err := services.NewInfluxService(
+	// Initialize InfluxDB service (optional - server can run without it)
+	var influxService *services.InfluxService
+	influxService, err = services.NewInfluxService(
 		cfg.InfluxDB.URL,
 		cfg.InfluxDB.Token,
 		cfg.InfluxDB.Org,
 		cfg.InfluxDB.Bucket,
 	)
 	if err != nil {
-		log.Fatalf("Failed to initialize InfluxDB service: %v", err)
+		log.Printf("[WARN] Failed to initialize InfluxDB service: %v", err)
+		log.Printf("[WARN] Server will start without InfluxDB - data writes will be disabled")
+		log.Printf("[WARN] WebSocket connections will still work, but data will not be persisted")
+		influxService = nil
+	} else {
+		defer influxService.Close()
 	}
-	defer influxService.Close()
 
-	s3Service, err := services.NewS3Service(&cfg.S3)
+	storageService, err := services.NewStorageService(cfg.Storage.BasePath, cfg.Storage.BaseURL)
 	if err != nil {
-		log.Fatalf("Failed to initialize S3 service: %v", err)
+		log.Fatalf("Failed to initialize storage service: %v", err)
 	}
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(jwtService)
 	timeSeriesHandler := handlers.NewTimeSeriesHandler(jwtService, influxService)
-	screenshotHandler := handlers.NewScreenshotHandler(s3Service, influxService)
+	screenshotHandler := handlers.NewScreenshotHandler(storageService, influxService)
 
 	// Setup router
-	router := setupRouter(jwtService, authHandler, timeSeriesHandler, screenshotHandler)
+	router := setupRouter(jwtService, authHandler, timeSeriesHandler, screenshotHandler, cfg.Storage.BasePath)
 
 	// Setup graceful shutdown
 	setupGracefulShutdown(influxService)
@@ -61,7 +67,7 @@ func main() {
 }
 
 // setupRouter configures the Gin router with all routes
-func setupRouter(jwtService *services.JWTService, authHandler *handlers.AuthHandler, timeSeriesHandler *handlers.TimeSeriesHandler, screenshotHandler *handlers.ScreenshotHandler) *gin.Engine {
+func setupRouter(jwtService *services.JWTService, authHandler *handlers.AuthHandler, timeSeriesHandler *handlers.TimeSeriesHandler, screenshotHandler *handlers.ScreenshotHandler, storagePath string) *gin.Engine {
 	router := gin.Default()
 
 	// Health check endpoint
@@ -71,8 +77,11 @@ func setupRouter(jwtService *services.JWTService, authHandler *handlers.AuthHand
 		})
 	})
 
-	// Mock authentication endpoint (protected by backend JWT auth)
-	router.POST("/mock-auth", middleware.BackendAuth(), authHandler.MockAuth)
+	// Serve static files from storage
+	router.Static("/storage", storagePath)
+
+	// Mock authentication endpoint (no auth required - for desktop app)
+	router.POST("/mock-auth", authHandler.MockAuth)
 
 	// WebSocket endpoint for time series data
 	router.GET("/time-series", timeSeriesHandler.HandleWebSocket)
@@ -98,7 +107,9 @@ func setupGracefulShutdown(influxService *services.InfluxService) {
 	go func() {
 		<-sigChan
 		log.Println("Shutting down gracefully...")
-		influxService.Close()
+		if influxService != nil {
+			influxService.Close()
+		}
 		os.Exit(0)
 	}()
 }

@@ -12,7 +12,7 @@ type Config struct {
 	Server   ServerConfig
 	JWT      JWTConfig
 	InfluxDB InfluxDBConfig
-	S3       S3Config
+	Storage  StorageConfig
 }
 
 // ServerConfig holds server-related configuration
@@ -36,13 +36,10 @@ type InfluxDBConfig struct {
 	Bucket   string
 }
 
-// S3Config holds S3 connection details
-type S3Config struct {
-	Bucket          string
-	Region          string
-	AccessKeyID     string
-	SecretAccessKey string
-	Endpoint        string // Optional: for S3-compatible services like MinIO
+// StorageConfig holds local storage configuration
+type StorageConfig struct {
+	BasePath string // Base path for storing files locally
+	BaseURL  string // Base URL for serving files (e.g., http://localhost:8080/storage)
 }
 
 // Load loads configuration from environment variables
@@ -66,12 +63,9 @@ func Load() (*Config, error) {
 			Org:      getEnv("INFLUXDB2_ORG", ""),
 			Bucket:   getEnv("INFLUXDB2_BUCKET", ""),
 		},
-		S3: S3Config{
-			Bucket:          getEnv("S3_BUCKET", ""),
-			Region:          getEnv("S3_REGION", "us-east-1"),
-			AccessKeyID:     getEnv("S3_ACCESS_KEY_ID", ""),
-			SecretAccessKey: getEnv("S3_SECRET_ACCESS_KEY", ""),
-			Endpoint:        getEnv("S3_ENDPOINT", ""), // Optional for MinIO/custom S3
+		Storage: StorageConfig{
+			BasePath: getEnv("STORAGE_BASE_PATH", "./storage"),
+			BaseURL:  getEnv("STORAGE_BASE_URL", "http://localhost:8080/storage"),
 		},
 	}
 
@@ -88,14 +82,8 @@ func Load() (*Config, error) {
 	if cfg.InfluxDB.Bucket == "" {
 		return nil, fmt.Errorf("INFLUXDB2_BUCKET is required")
 	}
-	if cfg.S3.Bucket == "" {
-		return nil, fmt.Errorf("S3_BUCKET is required")
-	}
-	if cfg.S3.AccessKeyID == "" {
-		return nil, fmt.Errorf("S3_ACCESS_KEY_ID is required")
-	}
-	if cfg.S3.SecretAccessKey == "" {
-		return nil, fmt.Errorf("S3_SECRET_ACCESS_KEY is required")
+	if cfg.Storage.BasePath == "" {
+		return nil, fmt.Errorf("STORAGE_BASE_PATH is required")
 	}
 
 	return cfg, nil

@@ -30,6 +30,7 @@ export default function WeeklyReportsPage() {
   const [pageState, setPageState] = useState<PageState>('form')
   const [reportData, setReportData] = useState<any>(null)
   const [formData, setFormData] = useState<{
+    accountId: number
     users: Array<{ name: string; id: number }>
     org: string
     orgId: number
@@ -37,6 +38,7 @@ export default function WeeklyReportsPage() {
   } | null>(null)
 
   const handleFormSubmit = async (data: {
+    accountId: number
     users: Array<{ name: string; id: number }>
     org: string
     orgId: number

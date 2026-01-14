@@ -275,6 +275,38 @@ echo -e "${GREEN}✅ matt-tracker-report started (PID: $REPORT_PID)${NC}"
 # Wait for report service to be ready
 sleep 3
 
+# Start Python chat agent
+echo -e "${YELLOW}🤖 Starting Python chat agent...${NC}"
+cd matt-tracker-chat-agent
+
+# Check if virtual environment exists, create if not
+if [ ! -d "venv" ]; then
+    echo -e "${YELLOW}📦 Creating Python virtual environment...${NC}"
+    python3 -m venv venv
+fi
+
+# Activate virtual environment and install dependencies
+source venv/bin/activate
+pip install -q -r requirements.txt
+
+# Note: OPENAI_API_KEY is not required at startup
+# Users will provide their API key through the frontend interface
+echo -e "${GREEN}ℹ️  Note: Users will provide OpenAI API key through the frontend interface${NC}"
+
+# Set default backend URL if not set
+if [ -z "$BACKEND_URL" ]; then
+    export BACKEND_URL="http://localhost:8085"
+fi
+
+# Run Python agent in background
+python server.py > /tmp/matt-chat-agent.log 2>&1 &
+CHAT_AGENT_PID=$!
+cd ..
+echo -e "${GREEN}✅ Python chat agent started (PID: $CHAT_AGENT_PID)${NC}"
+
+# Wait for chat agent to be ready
+sleep 2
+
 # Start frontend
 echo -e "${YELLOW}🌐 Starting frontend...${NC}"
 cd matt-tracker-frontend
@@ -309,6 +341,7 @@ echo -e "${GREEN}📍 Service URLs:${NC}"
 echo -e "  - Frontend:        http://localhost:3030"
 echo -e "  - Collector API:   http://localhost:8080"
 echo -e "  - Report API:      http://localhost:8085"
+echo -e "  - Chat Agent:      http://localhost:8087"
 if [ "$USE_DOCKER" = "true" ]; then
     echo -e "  - MongoDB:         mongodb://localhost:27017"
     echo -e "  - InfluxDB:        http://localhost:8086"
@@ -326,6 +359,9 @@ cleanup() {
     echo -e "${YELLOW}🛑 Shutting down services...${NC}"
     if [ -n "$COLLECTOR_PID" ]; then
         kill $COLLECTOR_PID 2>/dev/null || true
+    fi
+    if [ -n "$CHAT_AGENT_PID" ]; then
+        kill $CHAT_AGENT_PID 2>/dev/null || true
     fi
     kill $REPORT_PID $FRONTEND_PID $DESKTOP_PID 2>/dev/null || true
     if [ "$USE_DOCKER" = "true" ]; then

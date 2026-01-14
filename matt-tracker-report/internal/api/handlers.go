@@ -19,6 +19,7 @@ type Handlers struct {
 	taskService       *services.TaskService
 	weeklyEmailService *services.WeeklyEmailService
 	mongoClient       *database.MongoDBClient
+	chatTools         *services.ChatTools
 }
 
 // NewHandlers creates a new handlers instance
@@ -27,12 +28,14 @@ func NewHandlers(
 	taskService *services.TaskService,
 	weeklyEmailService *services.WeeklyEmailService,
 	mongoClient *database.MongoDBClient,
+	chatTools *services.ChatTools,
 ) *Handlers {
 	return &Handlers{
 		reportService:      reportService,
 		taskService:        taskService,
 		weeklyEmailService: weeklyEmailService,
 		mongoClient:        mongoClient,
+		chatTools:          chatTools,
 	}
 }
 
@@ -397,6 +400,78 @@ func (h *Handlers) GetOptedInAccountsHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"accountId": accountID,
 		"accounts":  accounts,
+	})
+}
+
+// ListToolsHandler handles GET /api/chat/tools
+// Returns list of all available tools with their schemas
+func (h *Handlers) ListToolsHandler(c *gin.Context) {
+	if h.chatTools == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "chat tools not initialized"})
+		return
+	}
+
+	tools := h.chatTools.GetAllTools()
+	toolSchemas := make([]map[string]interface{}, len(tools))
+
+	for i, tool := range tools {
+		toolSchemas[i] = map[string]interface{}{
+			"name":        tool.Name,
+			"description": tool.Description,
+			"parameters":  tool.Parameters,
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"tools": toolSchemas,
+	})
+}
+
+// ExecuteToolHandler handles POST /api/chat/tools/execute
+// Executes a tool with given parameters
+func (h *Handlers) ExecuteToolHandler(c *gin.Context) {
+	if h.chatTools == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "chat tools not initialized"})
+		return
+	}
+
+	var req struct {
+		ToolName string                 `json:"tool_name" binding:"required"`
+		Params   map[string]interface{} `json:"params" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Find the tool
+	tools := h.chatTools.GetAllTools()
+	var tool *services.Tool
+	for i := range tools {
+		if tools[i].Name == req.ToolName {
+			tool = &tools[i]
+			break
+		}
+	}
+
+	if tool == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": fmt.Sprintf("tool '%s' not found", req.ToolName)})
+		return
+	}
+
+	// Execute the tool
+	result, err := tool.Execute(req.Params)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "tool execution failed",
+			"message": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"result": result,
 	})
 }
 

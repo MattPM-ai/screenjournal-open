@@ -96,6 +96,19 @@ data/
 *.backup
 *~
 
+# Python Virtual Environments
+venv/
+env/
+ENV/
+.venv/
+.env/
+*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
 # ============================================================================
 # Note: Component-specific .gitignore files are preserved in:
 # - matt-collector/.gitignore

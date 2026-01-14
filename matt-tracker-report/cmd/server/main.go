@@ -84,8 +84,11 @@ func main() {
 		log.Printf("SendGrid API key not configured, weekly email reports disabled")
 	}
 
+	// Initialize chat tools
+	chatTools := services.NewChatTools(influxClient, reportService)
+
 	// Initialize handlers
-	handlers := api.NewHandlers(reportService, taskService, weeklyEmailService, mongoClient)
+	handlers := api.NewHandlers(reportService, taskService, weeklyEmailService, mongoClient, chatTools)
 
 	// Setup routes
 	router := api.SetupRoutes(handlers)

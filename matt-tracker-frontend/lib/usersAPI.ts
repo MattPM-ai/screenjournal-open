@@ -55,6 +55,9 @@ const handleResponse = async (response: Response) => {
   return response.json()
 }
 
+// Import authenticated fetch for API calls
+import { authenticatedFetch } from './authAPI'
+
 // ============================================================================
 // USERS API
 // ============================================================================
@@ -62,11 +65,8 @@ const handleResponse = async (response: Response) => {
 export const usersAPI = {
   // Get all users with pagination
   getUsersPaginated: async (accountId: number, page: number = 0, limit: number = 20): Promise<PaginatedResponse<User>> => {
-    const response = await fetch(`${API_BASE_URL}/users/${accountId}/users?page=${page}&limit=${limit}`, {
+    const response = await authenticatedFetch(`${API_BASE_URL}/users/${accountId}/users?page=${page}&limit=${limit}`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
     })
     return handleResponse(response)
   },

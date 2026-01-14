@@ -4,11 +4,12 @@
  * ============================================================================
  * 
  * PURPOSE: Display user authentication status and provide quick access to auth actions
- * SCOPE: User profile menu for authenticated users
+ * SCOPE: Login/Register buttons for unauthenticated users, profile menu for authenticated users
  * DEPENDENCIES: authAPI for authentication state and logout
  * 
  * FEATURES:
  * - Dynamic display based on authentication state
+ * - Login/Register buttons for unauthenticated users
  * - User profile dropdown for authenticated users
  * - Logout functionality
  * - Responsive design
@@ -21,7 +22,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { logout, getProfile } from '@/lib/authAPI';
+import { logout, getProfile, checkAuthentication } from '@/lib/authAPI';
 
 interface User {
   id: number;
@@ -41,15 +42,23 @@ export default function UserMenu() {
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const loadUserProfile = async () => {
+    const checkAuth = async () => {
       try {
-        // Try to load user profile - if it fails, user is not signed in
-        const userData = await getProfile();
-        setUser(userData);
-        setIsSignedIn(true);
+        const authStatus = await checkAuthentication();
+        setIsSignedIn(authStatus);
+        
+        if (authStatus) {
+          // Load user profile asynchronously
+          getProfile().then(userData => {
+            setUser(userData);
+          }).catch(error => {
+            console.error('Failed to load user profile:', error);
+          });
+        } else {
+          setUser(null);
+        }
       } catch (error) {
-        // User is not authenticated or profile load failed
-        console.error('Failed to load user profile:', error);
+        console.error('Authentication check failed:', error);
         setIsSignedIn(false);
         setUser(null);
       } finally {
@@ -57,14 +66,14 @@ export default function UserMenu() {
       }
     };
     
-    // Try to load profile on mount
-    loadUserProfile();
+    // Check auth on mount
+    checkAuth();
     
     // Listen for auth state changes (e.g., after registration/login)
     const handleAuthStateChange = () => {
-      console.log('🔍 UserMenu: Auth state change detected, re-loading profile...');
+      console.log('🔍 UserMenu: Auth state change detected, re-checking authentication...');
       setIsLoading(true);
-      loadUserProfile();
+      checkAuth();
     };
     
     window.addEventListener('authStateChange', handleAuthStateChange);
@@ -105,8 +114,22 @@ export default function UserMenu() {
   }
 
   if (!isSignedIn) {
-    // Return nothing when user is not signed in (no login/register buttons)
-    return null;
+    return (
+      <div className="flex items-center gap-2">
+        <Link
+          href="/login"
+          className="px-3 py-1.5 text-sm font-medium text-gray-600 border border-gray-300 rounded-md hover:text-gray-900 hover:bg-gray-50 transition-colors"
+        >
+          Login
+        </Link>
+        <Link
+          href="/register"
+          className="px-3 py-1.5 text-sm font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 active:bg-blue-800 transition-all"
+        >
+          Register
+        </Link>
+      </div>
+    );
   }
 
   return (
@@ -144,6 +167,19 @@ export default function UserMenu() {
               {user?.email}
             </p>
           </div>
+          
+          <Link
+            href="/profile"
+            className="block px-3 py-2 text-sm text-gray-900 hover:bg-gray-50 transition-colors"
+            onClick={() => setIsOpen(false)}
+          >
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              <span>View Profile</span>
+            </div>
+          </Link>
           
           <button
             onClick={handleLogout}

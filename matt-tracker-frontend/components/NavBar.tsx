@@ -18,11 +18,40 @@ import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import UserMenu from './UserMenu'
+import { checkAuthentication } from '@/lib/authAPI'
 
 export default function NavBar() {
   const pathname = usePathname()
+  const [isSignedIn, setIsSignedIn] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const mobileMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const authStatus = await checkAuthentication()
+        setIsSignedIn(authStatus)
+      } catch (error) {
+        console.error('Authentication check failed:', error)
+        setIsSignedIn(false)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    checkAuth()
+
+    // Listen for auth state changes
+    const handleAuthStateChange = () => {
+      checkAuth()
+    }
+
+    window.addEventListener('authStateChange', handleAuthStateChange)
+    return () => {
+      window.removeEventListener('authStateChange', handleAuthStateChange)
+    }
+  }, [])
 
   // Close mobile menu when clicking outside
   useEffect(() => {
@@ -41,9 +70,13 @@ export default function NavBar() {
     setIsMobileMenuOpen(false)
   }, [pathname])
 
+  const logoHref = isLoading ? '/' : (isSignedIn ? '/' : '/login')
+
   const navLinks = [
     { href: '/', label: 'Chat' },
     { href: '/reports', label: 'Reports' },
+    { href: '/organisations', label: 'Organisations' },
+    { href: '/users', label: 'Users' },
   ]
 
   return (
@@ -52,7 +85,8 @@ export default function NavBar() {
         {/* Left side: Hamburger (mobile) + Logo */}
         <div className="flex items-center gap-3">
           {/* Mobile Menu Button - shown on mobile */}
-          <div className="[@media(min-width:775px)]:hidden relative" ref={mobileMenuRef}>
+          {!isLoading && isSignedIn && (
+            <div className="[@media(min-width:775px)]:hidden relative" ref={mobileMenuRef}>
               <button
                 onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                 className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md transition-colors"
@@ -92,7 +126,8 @@ export default function NavBar() {
                 </div>
               )}
             </div>
-          <Link href="/" className="text-xl font-semibold text-blue-600 hover:text-blue-700 transition-colors">
+          )}
+          <Link href={logoHref} className="text-xl font-semibold text-blue-600 hover:text-blue-700 transition-colors">
             MattPM
           </Link>
         </div>
@@ -100,7 +135,8 @@ export default function NavBar() {
         {/* Right side: Desktop Navigation + UserMenu */}
         <div className="flex gap-6 items-center">
           {/* Desktop Navigation - hidden on mobile */}
-          <div className="hidden [@media(min-width:775px)]:flex gap-6 items-center">
+          {!isLoading && isSignedIn && (
+            <div className="hidden [@media(min-width:775px)]:flex gap-6 items-center">
               {navLinks.map((link) => (
                 <Link 
                   key={link.href}
@@ -114,7 +150,8 @@ export default function NavBar() {
                   {link.label}
                 </Link>
               ))}
-          </div>
+            </div>
+          )}
           <UserMenu />
         </div>
       </div>

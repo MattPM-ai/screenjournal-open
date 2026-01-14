@@ -65,24 +65,34 @@ function MessageContent({ content, role }: { content: string; role: 'user' | 'as
   )
 }
 
+const GEMINI_API_KEY_STORAGE_KEY = 'gemini_api_key'
+
 export default function Chat() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [sessionId, setSessionId] = useState<string | null>(null)
+  const [apiKey, setApiKey] = useState<string>('')
+  const [showApiKeyInput, setShowApiKeyInput] = useState(false)
+  const [apiKeyError, setApiKeyError] = useState<string>('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   /**
-   * Initializes session ID on component mount
-   * 
-   * DESCRIPTION:
-   * Retrieves or generates a session ID using UUIDv5 and stores it in state.
-   * This ensures the session ID is available for all webhook requests.
+   * Initializes session ID and loads API key on component mount
    */
   useEffect(() => {
     const id = getSessionId()
     setSessionId(id)
+    
+    // Load API key from localStorage
+    const storedApiKey = localStorage.getItem(GEMINI_API_KEY_STORAGE_KEY)
+    if (storedApiKey) {
+      setApiKey(storedApiKey)
+    } else {
+      // Show API key input if not set
+      setShowApiKeyInput(true)
+    }
   }, [])
 
   /**
@@ -97,7 +107,27 @@ export default function Chat() {
   }, [messages])
 
   /**
-   * Handles sending a message to the webhook
+   * Handles saving API key
+   */
+  const handleSaveApiKey = () => {
+    if (!apiKey.trim()) {
+      setApiKeyError('API key is required')
+      return
+    }
+    
+    // Basic validation - Gemini keys are typically alphanumeric
+    if (apiKey.trim().length < 20) {
+      setApiKeyError('Invalid API key format. Please check your Gemini API key.')
+      return
+    }
+    
+    localStorage.setItem(GEMINI_API_KEY_STORAGE_KEY, apiKey.trim())
+    setShowApiKeyInput(false)
+    setApiKeyError('')
+  }
+
+  /**
+   * Handles sending a message to the chat agent
    * 
    * INPUTS:
    * - message: string - The user's message content
@@ -108,9 +138,17 @@ export default function Chat() {
    * 
    * ERROR HANDLING:
    * - Displays error message if API call fails
+   * - Prompts for API key if not set
    */
   const sendMessage = async (message: string) => {
     if (!message.trim() || isLoading || !sessionId) return
+
+    // Check if API key is set
+    if (!apiKey || !apiKey.trim()) {
+      setShowApiKeyInput(true)
+      setApiKeyError('Please enter your Gemini API key to use the chat')
+      return
+    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -132,6 +170,7 @@ export default function Chat() {
         body: JSON.stringify({ 
           chatInput: message.trim(),
           sessionId: sessionId,
+          geminiApiKey: apiKey.trim(),
         }),
       })
 
@@ -189,9 +228,76 @@ export default function Chat() {
 
   return (
     <div className="w-full max-w-4xl h-[90vh] max-h-[800px] flex flex-col bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200">
-      <div className="px-6 py-4 border-b border-gray-200 bg-white">
+      <div className="px-6 py-4 border-b border-gray-200 bg-white flex items-center justify-between">
         <h1 className="text-xl font-semibold text-gray-900 m-0 tracking-tight">Chat</h1>
+        {!showApiKeyInput && apiKey && (
+          <button
+            onClick={() => {
+              setShowApiKeyInput(true)
+              setApiKeyError('')
+            }}
+            className="text-sm text-gray-600 hover:text-gray-900 px-3 py-1 rounded-md hover:bg-gray-100 transition-colors"
+            title="Change API key"
+          >
+            API Key
+          </button>
+        )}
       </div>
+
+      {/* API Key Input Modal */}
+      {showApiKeyInput && (
+        <div className="px-6 py-4 border-b border-gray-200 bg-blue-50">
+          <div className="flex flex-col gap-2">
+            <label htmlFor="api-key" className="text-sm font-medium text-gray-700">
+              Gemini API Key
+            </label>
+            <div className="flex gap-2">
+              <input
+                id="api-key"
+                type="password"
+                value={apiKey}
+                onChange={(e) => {
+                  setApiKey(e.target.value)
+                  setApiKeyError('')
+                }}
+                placeholder="Enter your Gemini API key..."
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleSaveApiKey()
+                  }
+                }}
+              />
+              <button
+                onClick={handleSaveApiKey}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium"
+              >
+                Save
+              </button>
+              {apiKey && (
+                <button
+                  onClick={() => {
+                    setShowApiKeyInput(false)
+                    setApiKeyError('')
+                  }}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors text-sm"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+            {apiKeyError && (
+              <p className="text-sm text-red-600">{apiKeyError}</p>
+            )}
+            <p className="text-xs text-gray-600">
+              Your API key is stored locally and only sent to the chat agent. Get your key from{' '}
+              <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                Google AI Studio
+              </a>
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-4 bg-white">
         {messages.length === 0 ? (

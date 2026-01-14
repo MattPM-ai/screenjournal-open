@@ -3,15 +3,15 @@ package models
 // UserRequest represents a user in the report generation request
 type UserRequest struct {
 	Name string `json:"name" binding:"required"`
-	ID   int    `json:"id"` // Optional, defaults to 0
+	ID   int    `json:"id" binding:"required"`
 }
 
 // GenerateReportRequest represents the request to generate a report
 type GenerateReportRequest struct {
-	AccountID int           `json:"accountId"` // Optional, defaults to 0
+	AccountID int           `json:"accountId" binding:"required"`
 	Users     []UserRequest `json:"users" binding:"required,min=1"`
 	Org       string        `json:"org" binding:"required"`
-	OrgID     int           `json:"orgId"` // Optional, defaults to 0
+	OrgID     int           `json:"orgId" binding:"required"`
 	StartDate string        `json:"startDate" binding:"required"` // YYYY-MM-DD
 	EndDate   string        `json:"endDate" binding:"required"`   // YYYY-MM-DD
 }
@@ -24,10 +24,10 @@ type TaskResponse struct {
 
 // GenerateWeeklyReportRequest represents the request to generate a weekly report
 type GenerateWeeklyReportRequest struct {
-	AccountID int           `json:"accountId"` // Optional, defaults to 0
+	AccountID int           `json:"accountId" binding:"required"`
 	Users     []UserRequest `json:"users" binding:"required,min=1"`
 	Org       string        `json:"org" binding:"required"`
-	OrgID     int           `json:"orgId"` // Optional, defaults to 0
+	OrgID     int           `json:"orgId" binding:"required"`
 	WeekStartDate string    `json:"weekStartDate" binding:"required"` // YYYY-MM-DD - Monday of the week (or start date if custom period)
 	// Optional: Custom start/end dates for exact period (overrides Monday-Sunday calculation)
 	CustomStartDate *string `json:"customStartDate,omitempty"` // ISO 8601 datetime (e.g., "2025-12-01T16:30:00Z")

@@ -10,6 +10,7 @@
  * ============================================================================
  */
 
+import { authenticatedFetch } from './authAPI'
 
 export interface WeeklyReportOptInRequest {
   accountId: number
@@ -70,11 +71,8 @@ export interface OptedInAccountsResponse {
  */
 export const optInWeeklyReports = async (data: WeeklyReportOptInRequest): Promise<WeeklyReportOptInResponse> => {
   try {
-    const response = await fetch('/api/reports/weekly/opt-in', {
+    const response = await authenticatedFetch('/api/reports/weekly/opt-in', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify(data),
     })
 
@@ -105,11 +103,8 @@ export const optInWeeklyReports = async (data: WeeklyReportOptInRequest): Promis
  */
 export const optOutWeeklyReports = async (data: WeeklyReportOptOutRequest): Promise<WeeklyReportOptOutResponse> => {
   try {
-    const response = await fetch('/api/reports/weekly/opt-out', {
+    const response = await authenticatedFetch('/api/reports/weekly/opt-out', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify(data),
     })
 
@@ -155,11 +150,8 @@ export interface OptedInAccountsResponse {
  */
 export const getOptedInAccounts = async (accountId: number): Promise<OptedInAccountsResponse> => {
   try {
-    const response = await fetch(`/api/reports/weekly/opted-in/${accountId}`, {
+    const response = await authenticatedFetch(`/api/reports/weekly/opted-in/${accountId}`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
     })
 
     if (!response.ok) {

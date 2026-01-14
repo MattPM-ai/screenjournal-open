@@ -122,3 +122,4 @@ After fixes, verify:
 - [ ] Desktop app can authenticate and send data
 - [ ] All services start without errors when Docker is not available
 
+

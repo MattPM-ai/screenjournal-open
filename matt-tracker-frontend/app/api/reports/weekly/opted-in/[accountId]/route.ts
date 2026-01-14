@@ -30,8 +30,14 @@ export async function GET(
   { params }: { params: { accountId: string } }
 ) {
   try {
-    // Get token from request cookies (server-side) - optional
+    // Get token from request cookies (server-side)
     const token = request.cookies.get('accessToken')?.value
+    if (!token) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
 
     const { accountId } = params
 
@@ -44,15 +50,12 @@ export async function GET(
     }
 
     // Forward request to backend API
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-    }
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`
-    }
     const response = await fetch(`${BACKEND_URL}/api/reports/weekly/opted-in/${accountId}`, {
       method: 'GET',
-      headers,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
     })
 
     if (!response.ok) {

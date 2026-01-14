@@ -3,22 +3,21 @@
  * CHAT API ROUTE
  * ============================================================================
  * 
- * PURPOSE: Handles communication with the n8n webhook endpoint
+ * PURPOSE: Handles communication with the LangChain chat agent service
  * 
  * DESCRIPTION:
  * This API route receives chat messages from the frontend and forwards
- * them to the n8n webhook. It processes the response and returns it
- * to the client in a standardized format.
+ * them to the local LangChain chat agent service. It processes the response
+ * and returns it to the client in a standardized format.
  * 
  * DEPENDENCIES:
- * - External: n8n webhook URL (configured via NEXT_PUBLIC_N8N_WEBHOOK environment variable)
+ * - External: LangChain chat agent service (configured via CHAT_AGENT_URL environment variable)
  * 
  * INPUTS:
  * - POST body: { chatInput: string, sessionId: string } - The user's message and session ID
- * - Cookies: accessToken - The user's authentication token (automatically included)
  * 
  * OUTPUTS:
- * - JSON: { response: string } - The assistant's response from webhook
+ * - JSON: { response: string } - The assistant's response from chat agent
  * 
  * ERROR HANDLING:
  * - Returns appropriate HTTP status codes
@@ -29,96 +28,17 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 
-const WEBHOOK_URL = process.env.NEXT_PUBLIC_N8N_WEBHOOK || 'https://engine.upnode.org/webhook/19d61f71-86b7-4cf7-a553-a10214b2f5d2/chat'
-const API_BASE_URL = process.env.NEXT_PUBLIC_AUTH_BACKEND_URL
+// Use NEXT_PUBLIC_ prefix for client-accessible env vars, or server-side only
+const CHAT_AGENT_URL = process.env.NEXT_PUBLIC_CHAT_AGENT_URL || process.env.CHAT_AGENT_URL || 'http://localhost:8087'
 
 /**
- * Refreshes the access token using the refresh token
- * 
- * INPUTS:
- * - refreshToken: string - The refresh token from cookies
- * 
- * OUTPUTS:
- * - { accessToken: string, refreshToken: string } | null - New tokens or null if refresh failed
- * 
- * ERROR HANDLING:
- * - Returns null if refresh fails
- * - Logs errors for debugging
- */
-async function refreshAccessToken(refreshToken: string): Promise<{ accessToken: string, refreshToken: string } | null> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ refreshToken }),
-    })
-
-    if (!response.ok) {
-      console.error('Token refresh failed:', response.status, response.statusText)
-      return null
-    }
-
-    const data = await response.json()
-    if (data.data?.accessToken && data.data?.refreshToken) {
-      return {
-        accessToken: data.data.accessToken,
-        refreshToken: data.data.refreshToken,
-      }
-    }
-
-    return null
-  } catch (error) {
-    console.error('Token refresh error:', error)
-    return null
-  }
-}
-
-/**
- * Sets authentication cookies in the NextResponse
- * 
- * INPUTS:
- * - response: NextResponse - The response object to set cookies on
- * - accessToken: string - The access token
- * - refreshToken: string - The refresh token
- * 
- * OUTPUTS:
- * - NextResponse with cookies set
- */
-function setAuthCookiesInResponse(
-  response: NextResponse,
-  accessToken: string,
-  refreshToken: string
-): NextResponse {
-  // Set cookies with 7 day expiry
-  const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-  
-  response.cookies.set('accessToken', accessToken, {
-    expires,
-    path: '/',
-    sameSite: 'strict',
-    httpOnly: false, // Must be accessible to client-side code
-  })
-  
-  response.cookies.set('refreshToken', refreshToken, {
-    expires,
-    path: '/',
-    sameSite: 'strict',
-    httpOnly: false, // Must be accessible to client-side code
-  })
-  
-  return response
-}
-
-/**
- * Handles POST requests to send messages to the n8n webhook
+ * Handles POST requests to send messages to the LangChain chat agent
  * 
  * INPUTS:
  * - request: NextRequest - Contains the user's chat input and session ID in JSON body
  * 
  * OUTPUTS:
- * - NextResponse with webhook response or error
+ * - NextResponse with chat agent response or error
  * 
  * ERROR HANDLING:
  * - Validates request body
@@ -145,113 +65,62 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get user token from cookies
-    let accessToken = request.cookies.get('accessToken')?.value || null
-    const refreshToken = request.cookies.get('refreshToken')?.value || null
-    let refreshedTokens: { accessToken: string, refreshToken: string } | null = null
+    // Get Gemini API key from request body (provided by frontend)
+    const geminiApiKey = body.geminiApiKey || body.openaiApiKey // Support both for backward compatibility
 
-    // Prepare request body for n8n webhook
-    const webhookBody: {
-      chatInput: string
-      sessionId: string
-      userToken?: string
-    } = {
+    if (!geminiApiKey || typeof geminiApiKey !== 'string' || !geminiApiKey.trim()) {
+      return NextResponse.json(
+        { error: 'Gemini API key is required. Please enter your API key in the chat interface.' },
+        { status: 400 }
+      )
+    }
+
+    // Prepare request body for chat agent
+    const chatAgentBody = {
       chatInput: chatInput.trim(),
       sessionId: sessionId,
+      geminiApiKey: geminiApiKey.trim(),
     }
 
-    // Include user token if available
-    if (accessToken) {
-      webhookBody.userToken = accessToken
-    }
-
-    // Forward request to n8n webhook with session ID and user token
-    let webhookResponse = await fetch(WEBHOOK_URL, {
+    // Forward request to LangChain chat agent
+    const chatAgentResponse = await fetch(`${CHAT_AGENT_URL}/api/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(webhookBody),
+      body: JSON.stringify(chatAgentBody),
     })
 
-    // Handle 500 errors - likely due to expired token
-    // Try refreshing token and retrying once
-    if (webhookResponse.status === 500 && refreshToken) {
-      console.log('Webhook returned 500, attempting token refresh...')
+    // Handle chat agent response
+    if (!chatAgentResponse.ok) {
+      const errorText = await chatAgentResponse.text()
+      console.error('Chat agent error:', chatAgentResponse.status, errorText)
       
-      refreshedTokens = await refreshAccessToken(refreshToken)
-      
-      if (refreshedTokens) {
-        // Update access token for retry
-        accessToken = refreshedTokens.accessToken
-        webhookBody.userToken = accessToken
-        
-        // Retry the webhook request with new token
-        webhookResponse = await fetch(WEBHOOK_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(webhookBody),
-        })
-      }
-    }
-
-    // Handle webhook response (including after retry)
-    if (!webhookResponse.ok) {
-      const errorText = await webhookResponse.text()
-      console.error('Webhook error:', webhookResponse.status, errorText)
-      
-      // Create error response
-      const errorResponse = NextResponse.json(
+      return NextResponse.json(
         { 
-          error: webhookResponse.status === 500 
-            ? 'Server responded with a status of 500 (Internal Server Error)'
-            : 'Failed to get response from webhook',
+          error: chatAgentResponse.status === 500 
+            ? 'Chat agent responded with a status of 500 (Internal Server Error)'
+            : 'Failed to get response from chat agent',
           details: errorText 
         },
-        { status: webhookResponse.status }
+        { status: chatAgentResponse.status }
       )
-      
-      // If we refreshed tokens, update cookies even on error
-      if (refreshedTokens) {
-        setAuthCookiesInResponse(errorResponse, refreshedTokens.accessToken, refreshedTokens.refreshToken)
-      }
-      
-      return errorResponse
     }
 
-    // Parse webhook response
-    let responseData
-    const contentType = webhookResponse.headers.get('content-type')
-    
-    if (contentType && contentType.includes('application/json')) {
-      responseData = await webhookResponse.json()
-    } else {
-      const textResponse = await webhookResponse.text()
-      responseData = { output: textResponse }
-    }
+    // Parse chat agent response
+    const responseData = await chatAgentResponse.json()
+    const response = responseData.response
 
-    // Extract output field from webhook response
-    const output = responseData.output
-
-    if (output === undefined || output === null) {
-      console.error('Webhook response missing output field:', responseData)
+    if (response === undefined || response === null) {
+      console.error('Chat agent response missing response field:', responseData)
       return NextResponse.json(
-        { error: 'Webhook response missing output field' },
+        { error: 'Chat agent response missing response field' },
         { status: 500 }
       )
     }
 
-    // Create success response
-    const successResponse = NextResponse.json({ response: output })
-    
-    // If we refreshed tokens during retry, update cookies in response
-    if (refreshedTokens) {
-      setAuthCookiesInResponse(successResponse, refreshedTokens.accessToken, refreshedTokens.refreshToken)
-    }
-    
-    return successResponse
+    // Return success response
+    return NextResponse.json({ response })
   } catch (error) {
     console.error('API route error:', error)
     

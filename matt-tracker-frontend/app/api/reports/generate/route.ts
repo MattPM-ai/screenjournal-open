@@ -27,19 +27,32 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL// || 'https://matt-track
 
 export async function POST(request: NextRequest) {
   try {
-    // Get token from request cookies (server-side) - optional
+    // Get token from request cookies (server-side)
     const token = request.cookies.get('accessToken')?.value
+    if (!token) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
 
     const body = await request.json()
     const { accountId, users, org, orgId, startDate, endDate } = body
 
-    // Normalize accountId (optional, defaults to 0)
-    let normalizedAccountId: number = 0
-    if (accountId !== null && accountId !== undefined) {
-      normalizedAccountId = typeof accountId === 'string' ? Number(accountId) : accountId
-      if (isNaN(normalizedAccountId)) {
-        normalizedAccountId = 0
-      }
+    // Validate and normalize accountId (handle both string and number)
+    let normalizedAccountId: number
+    if (accountId === null || accountId === undefined) {
+      return NextResponse.json(
+        { error: 'accountId is required and must be a number' },
+        { status: 400 }
+      )
+    }
+    normalizedAccountId = typeof accountId === 'string' ? Number(accountId) : accountId
+    if (isNaN(normalizedAccountId) || normalizedAccountId <= 0) {
+      return NextResponse.json(
+        { error: 'accountId is required and must be a valid positive number' },
+        { status: 400 }
+      )
     }
 
     if (!users || !Array.isArray(users) || users.length === 0) {
@@ -65,13 +78,20 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         )
       }
-      // Normalize user ID (optional, defaults to 0)
-      let normalizedUserId: number = 0
-      if (user.id !== null && user.id !== undefined) {
-        normalizedUserId = typeof user.id === 'string' ? Number(user.id) : user.id
-        if (isNaN(normalizedUserId)) {
-          normalizedUserId = 0
-        }
+      // Validate and normalize user ID (handle both string and number)
+      let normalizedUserId: number
+      if (user.id === null || user.id === undefined) {
+        return NextResponse.json(
+          { error: `users[${i}].id is required and must be a number` },
+          { status: 400 }
+        )
+      }
+      normalizedUserId = typeof user.id === 'string' ? Number(user.id) : user.id
+      if (isNaN(normalizedUserId) || normalizedUserId <= 0) {
+        return NextResponse.json(
+          { error: `users[${i}].id is required and must be a valid positive number` },
+          { status: 400 }
+        )
       }
       normalizedUsers.push({
         name: user.name.trim(),
@@ -86,13 +106,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Normalize orgId (optional, defaults to 0)
-    let normalizedOrgId: number = 0
-    if (orgId !== null && orgId !== undefined) {
-      normalizedOrgId = typeof orgId === 'string' ? Number(orgId) : orgId
-      if (isNaN(normalizedOrgId)) {
-        normalizedOrgId = 0
-      }
+    // Validate and normalize orgId (handle both string and number)
+    let normalizedOrgId: number
+    if (orgId === null || orgId === undefined) {
+      return NextResponse.json(
+        { error: 'orgId is required and must be a number' },
+        { status: 400 }
+      )
+    }
+    normalizedOrgId = typeof orgId === 'string' ? Number(orgId) : orgId
+    if (isNaN(normalizedOrgId) || normalizedOrgId <= 0) {
+      return NextResponse.json(
+        { error: 'orgId is required and must be a valid positive number' },
+        { status: 400 }
+      )
     }
 
     if (!startDate || typeof startDate !== 'string') {
@@ -110,15 +137,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Forward request to backend API
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-    }
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`
-    }
     const response = await fetch(`${BACKEND_URL}/api/reports/generate`, {
       method: 'POST',
-      headers,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
       body: JSON.stringify({
         accountId: normalizedAccountId,
         users: normalizedUsers,

@@ -186,6 +186,12 @@ func (c *InfluxDBClient) Close() {
 	// HTTP client doesn't need explicit closing
 }
 
+// QueryFluxRaw executes a raw Flux query and returns the raw results as maps
+// This is useful for arbitrary queries that don't fit the structured query methods
+func (c *InfluxDBClient) QueryFluxRaw(ctx context.Context, fluxQuery string) ([]map[string]interface{}, error) {
+	return c.query(ctx, fluxQuery)
+}
+
 // query executes a Flux query against InfluxDB 2.0 via HTTP
 func (c *InfluxDBClient) query(ctx context.Context, fluxQuery string) ([]map[string]interface{}, error) {
 	// InfluxDB 2.0 Flux query endpoint

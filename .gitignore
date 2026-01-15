@@ -111,10 +111,10 @@ __pycache__/
 
 # ============================================================================
 # Note: Component-specific .gitignore files are preserved in:
-# - matt-collector/.gitignore
-# - matt-tracker-frontend/.gitignore
-# - matt-tracker-report/.gitignore
-# - mattpm/.gitignore
+# - sj-collector/.gitignore
+# - sj-tracker-frontend/.gitignore
+# - sj-tracker-report/.gitignore
+# - screenjournal/.gitignore
 # ============================================================================
 
 

@@ -19,15 +19,15 @@
 - **DELETE `/api/chat/session/<session_id>`** - Clear chat history
 
 **Files Created:**
-- `matt-tracker-chat-agent/server.py` - Flask HTTP server with LangChain agent
-- `matt-tracker-chat-agent/main.py` - Shared agent code (interactive CLI version)
-- `matt-tracker-chat-agent/requirements.txt` - Python dependencies (updated with Flask)
+- `sj-tracker-chat-agent/server.py` - Flask HTTP server with LangChain agent
+- `sj-tracker-chat-agent/main.py` - Shared agent code (interactive CLI version)
+- `sj-tracker-chat-agent/requirements.txt` - Python dependencies (updated with Flask)
 
 ### 3. Frontend Integration
 - Updated chat API route to call LangChain agent instead of n8n webhook
 
 **Files Modified:**
-- `matt-tracker-frontend/app/api/chat/route.ts` - Now calls local LangChain agent
+- `sj-tracker-frontend/app/api/chat/route.ts` - Now calls local LangChain agent
 
 ### 4. Startup Scripts
 - `start.sh` - Starts all services (Docker, Go backend, Python agent, Next.js frontend)

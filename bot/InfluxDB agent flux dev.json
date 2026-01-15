@@ -67,7 +67,7 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "query": "=from(bucket: \"matt-metrics-dev\")   |> range(start: {{ $fromAI('date_start', `Start timestamp to pull from`, 'string') }}, stop: {{ $fromAI('date_end', `End timestamp to pull from`, 'string') }})   |> filter(fn: (r) => r[\"_measurement\"] == \"afk_status\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
+            "query": "=from(bucket: \"screenjournal-metrics-dev\")   |> range(start: {{ $fromAI('date_start', `Start timestamp to pull from`, 'string') }}, stop: {{ $fromAI('date_end', `End timestamp to pull from`, 'string') }})   |> filter(fn: (r) => r[\"_measurement\"] == \"afk_status\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
           },
           "matchingColumns": [
             "query"
@@ -110,7 +110,7 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "query": "=from(bucket: \"matt-metrics-dev\")   |> range(start: {{ $fromAI('date_start', `Start timestamp to pull from`, 'string') }}, stop: {{ $fromAI('date_end', `End timestamp to pull from`, 'string') }})   |> filter(fn: (r) => r[\"_measurement\"] == \"app_usage\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
+            "query": "=from(bucket: \"screenjournal-metrics-dev\")   |> range(start: {{ $fromAI('date_start', `Start timestamp to pull from`, 'string') }}, stop: {{ $fromAI('date_end', `End timestamp to pull from`, 'string') }})   |> filter(fn: (r) => r[\"_measurement\"] == \"app_usage\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
           },
           "matchingColumns": [
             "query"
@@ -153,7 +153,7 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "query": "=from(bucket: \"matt-metrics-dev\")   |> range(start: {{ $fromAI('date_start', `Start timestamp to pull from`, 'string') }}, stop: {{ $fromAI('date_end', `End timestamp to pull from`, 'string') }})   |> filter(fn: (r) => r[\"_measurement\"] == \"daily_metrics\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
+            "query": "=from(bucket: \"screenjournal-metrics-dev\")   |> range(start: {{ $fromAI('date_start', `Start timestamp to pull from`, 'string') }}, stop: {{ $fromAI('date_end', `End timestamp to pull from`, 'string') }})   |> filter(fn: (r) => r[\"_measurement\"] == \"daily_metrics\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
           },
           "matchingColumns": [
             "query"
@@ -196,7 +196,7 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "query": "=from(bucket: \"matt-metrics-dev\")   |> range(start: {{ $fromAI('date_start', `Start timestamp to pull from`, 'string') }}, stop: {{ $fromAI('date_end', `End timestamp to pull from`, 'string') }})   |> filter(fn: (r) => r[\"_measurement\"] == \"window_activity\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
+            "query": "=from(bucket: \"screenjournal-metrics-dev\")   |> range(start: {{ $fromAI('date_start', `Start timestamp to pull from`, 'string') }}, stop: {{ $fromAI('date_end', `End timestamp to pull from`, 'string') }})   |> filter(fn: (r) => r[\"_measurement\"] == \"window_activity\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
           },
           "matchingColumns": [
             "query"
@@ -239,7 +239,7 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "query": "=from(bucket: \"matt-metrics-dev\")   |> range(start: {{ $fromAI('date_start', `Start timestamp to pull from`, 'string') }}, stop: {{ $fromAI('date_end', `End timestamp to pull from`, 'string') }})   |> filter(fn: (r) => r[\"_measurement\"] == \"window_activity\")   |> filter(fn: (r) => r[\"user\"] == \"{{ $fromAI('user', `User to retrieve for`, 'string') }}\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
+            "query": "=from(bucket: \"screenjournal-metrics-dev\")   |> range(start: {{ $fromAI('date_start', `Start timestamp to pull from`, 'string') }}, stop: {{ $fromAI('date_end', `End timestamp to pull from`, 'string') }})   |> filter(fn: (r) => r[\"_measurement\"] == \"window_activity\")   |> filter(fn: (r) => r[\"user\"] == \"{{ $fromAI('user', `User to retrieve for`, 'string') }}\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
           },
           "matchingColumns": [
             "query"
@@ -282,7 +282,7 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "query": "=from(bucket: \"matt-metrics-dev\")   |> range(start: {{ $fromAI('date_start', `Start timestamp to pull from`, 'string') }}, stop: {{ $fromAI('date_end', `End timestamp to pull from`, 'string') }})   |> filter(fn: (r) => r[\"_measurement\"] == \"daily_metrics\")   |> filter(fn: (r) => r[\"user\"] == \"{{ $fromAI('user', `User to retrieve for`, 'string') }}\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
+            "query": "=from(bucket: \"screenjournal-metrics-dev\")   |> range(start: {{ $fromAI('date_start', `Start timestamp to pull from`, 'string') }}, stop: {{ $fromAI('date_end', `End timestamp to pull from`, 'string') }})   |> filter(fn: (r) => r[\"_measurement\"] == \"daily_metrics\")   |> filter(fn: (r) => r[\"user\"] == \"{{ $fromAI('user', `User to retrieve for`, 'string') }}\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
           },
           "matchingColumns": [
             "query"
@@ -325,7 +325,7 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "query": "=from(bucket: \"matt-metrics-dev\")   |> range(start: {{ $fromAI('date_start', `Start timestamp to pull from`, 'string') }}, stop: {{ $fromAI('date_end', `End timestamp to pull from`, 'string') }})   |> filter(fn: (r) => r[\"_measurement\"] == \"app_usage\")   |> filter(fn: (r) => r[\"user\"] == \"{{ $fromAI('user', `User to retrieve for`, 'string') }}\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
+            "query": "=from(bucket: \"screenjournal-metrics-dev\")   |> range(start: {{ $fromAI('date_start', `Start timestamp to pull from`, 'string') }}, stop: {{ $fromAI('date_end', `End timestamp to pull from`, 'string') }})   |> filter(fn: (r) => r[\"_measurement\"] == \"app_usage\")   |> filter(fn: (r) => r[\"user\"] == \"{{ $fromAI('user', `User to retrieve for`, 'string') }}\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
           },
           "matchingColumns": [
             "query"
@@ -368,7 +368,7 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "query": "=from(bucket: \"matt-metrics-dev\")   |> range(start: {{ $fromAI('date_start', `Start timestamp to pull from`, 'string') }}, stop: {{ $fromAI('date_end', `End timestamp to pull from`, 'string') }})   |> filter(fn: (r) => r[\"_measurement\"] == \"afk_status\")   |> filter(fn: (r) => r[\"user\"] == \"{{ $fromAI('user', `User to retrieve for`, 'string') }}\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
+            "query": "=from(bucket: \"screenjournal-metrics-dev\")   |> range(start: {{ $fromAI('date_start', `Start timestamp to pull from`, 'string') }}, stop: {{ $fromAI('date_end', `End timestamp to pull from`, 'string') }})   |> filter(fn: (r) => r[\"_measurement\"] == \"afk_status\")   |> filter(fn: (r) => r[\"user\"] == \"{{ $fromAI('user', `User to retrieve for`, 'string') }}\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
           },
           "matchingColumns": [
             "query"
@@ -411,7 +411,7 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "query": "=from(bucket: \"matt-metrics-dev\")   |> filter(fn: (r) => r[\"_measurement\"] == \"window_activity\")   |> filter(fn: (r) => r[\"user\"] == \"{{ $fromAI('user', `User to retrieve for`, 'string') }}\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
+            "query": "=from(bucket: \"screenjournal-metrics-dev\")   |> filter(fn: (r) => r[\"_measurement\"] == \"window_activity\")   |> filter(fn: (r) => r[\"user\"] == \"{{ $fromAI('user', `User to retrieve for`, 'string') }}\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
           },
           "matchingColumns": [
             "query"
@@ -454,7 +454,7 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "query": "=from(bucket: \"matt-metrics-dev\")   |> filter(fn: (r) => r[\"_measurement\"] == \"daily_metrics\")   |> filter(fn: (r) => r[\"user\"] == \"{{ $fromAI('user', `User to retrieve for`, 'string') }}\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
+            "query": "=from(bucket: \"screenjournal-metrics-dev\")   |> filter(fn: (r) => r[\"_measurement\"] == \"daily_metrics\")   |> filter(fn: (r) => r[\"user\"] == \"{{ $fromAI('user', `User to retrieve for`, 'string') }}\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
           },
           "matchingColumns": [
             "query"
@@ -497,7 +497,7 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "query": "=from(bucket: \"matt-metrics-dev\")   |> filter(fn: (r) => r[\"_measurement\"] == \"app_usage\")   |> filter(fn: (r) => r[\"user\"] == \"{{ $fromAI('user', `User to retrieve for`, 'string') }}\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
+            "query": "=from(bucket: \"screenjournal-metrics-dev\")   |> filter(fn: (r) => r[\"_measurement\"] == \"app_usage\")   |> filter(fn: (r) => r[\"user\"] == \"{{ $fromAI('user', `User to retrieve for`, 'string') }}\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
           },
           "matchingColumns": [
             "query"
@@ -540,7 +540,7 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "query": "=from(bucket: \"matt-metrics-dev\")   |> filter(fn: (r) => r[\"_measurement\"] == \"afk_status\")   |> filter(fn: (r) => r[\"user\"] == \"{{ $fromAI('user', `User to retrieve for`, 'string') }}\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
+            "query": "=from(bucket: \"screenjournal-metrics-dev\")   |> filter(fn: (r) => r[\"_measurement\"] == \"afk_status\")   |> filter(fn: (r) => r[\"user\"] == \"{{ $fromAI('user', `User to retrieve for`, 'string') }}\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
           },
           "matchingColumns": [
             "query"
@@ -629,7 +629,7 @@
     },
     {
       "parameters": {
-        "url": "https://mattpm-api.mattpm.ai/api/n8n/user-info",
+        "url": "http://localhost:8080/api/n8n/user-info",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -710,7 +710,7 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "query": "=from(bucket: \"matt-metrics-dev\")   |> range(start: {{ $fromAI('date_start', `Start timestamp to pull from`, 'string') }}, stop: {{ $fromAI('date_end', `End timestamp to pull from`, 'string') }})   |> filter(fn: (r) => r[\"_measurement\"] == \"screen_timeline\")   |> filter(fn: (r) => r[\"user\"] == \"{{ $fromAI('user', `User to retrieve for`, 'string') }}\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
+            "query": "=from(bucket: \"screenjournal-metrics-dev\")   |> range(start: {{ $fromAI('date_start', `Start timestamp to pull from`, 'string') }}, stop: {{ $fromAI('date_end', `End timestamp to pull from`, 'string') }})   |> filter(fn: (r) => r[\"_measurement\"] == \"screen_timeline\")   |> filter(fn: (r) => r[\"user\"] == \"{{ $fromAI('user', `User to retrieve for`, 'string') }}\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
           },
           "matchingColumns": [
             "query"
@@ -753,7 +753,7 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "query": "=from(bucket: \"matt-metrics-dev\")   |> range(start: {{ $fromAI('date_start', `Start timestamp to pull from`, 'string') }}, stop: {{ $fromAI('date_end', `End timestamp to pull from`, 'string') }})   |> filter(fn: (r) => r[\"_measurement\"] == \"screen_timeline\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
+            "query": "=from(bucket: \"screenjournal-metrics-dev\")   |> range(start: {{ $fromAI('date_start', `Start timestamp to pull from`, 'string') }}, stop: {{ $fromAI('date_end', `End timestamp to pull from`, 'string') }})   |> filter(fn: (r) => r[\"_measurement\"] == \"screen_timeline\")   |> filter(fn: (r) => r[\"account_id\"] == \"{{$json.accountId}}\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
           },
           "matchingColumns": [
             "query"

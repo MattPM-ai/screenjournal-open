@@ -4,7 +4,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://localhost:8086/api/v2/query?org=matt-org",
+        "url": "http://localhost:8086/api/v2/query?org=screenjournal-org",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -91,7 +91,7 @@
         "workflowInputs": {
           "mappingMode": "defineBelow",
           "value": {
-            "query": "from(bucket: \"matt-metrics-dev\")   |> range(start: 2025-12-16T00:00:00Z, stop: 2025-12-17T23:59:59Z)   |> filter(fn: (r) => r[\"_measurement\"] == \"window_activity\")   |> filter(fn: (r) => r[\"user\"] == \"Alex\")   |> filter(fn: (r) => r[\"account_id\"] == \"10\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
+            "query": "from(bucket: \"screenjournal-metrics-dev\")   |> range(start: 2025-12-16T00:00:00Z, stop: 2025-12-17T23:59:59Z)   |> filter(fn: (r) => r[\"_measurement\"] == \"window_activity\")   |> filter(fn: (r) => r[\"user\"] == \"Alex\")   |> filter(fn: (r) => r[\"account_id\"] == \"10\")   |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")"
           },
           "matchingColumns": [
             "query"

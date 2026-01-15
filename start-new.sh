@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Unified launch script for the Matt Productivity Tracker system
+# Unified launch script for the ScreenJournal Productivity Tracker system
 # This script starts all services: databases, backends, frontend, and desktop app
 
 set -e
@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
-echo -e "${GREEN}🚀 Starting Matt Productivity Tracker System${NC}"
+echo -e "${GREEN}🚀 Starting ScreenJournal Productivity Tracker System${NC}"
 echo ""
 
 # Function to check if a command exists
@@ -93,7 +93,7 @@ echo ""
 # Create storage and data directories
 echo -e "${YELLOW}📁 Creating storage directories...${NC}"
 mkdir -p storage
-mkdir -p matt-collector/storage
+mkdir -p sj-collector/storage
 mkdir -p data
 echo -e "${GREEN}✅ Storage directories created${NC}"
 echo ""
@@ -104,8 +104,8 @@ if [ "$USE_DOCKER" = "true" ]; then
     echo -e "${YELLOW}🐳 Starting Docker services (MongoDB, InfluxDB)...${NC}"
     
     # Check if containers already exist and are running
-    if docker ps --format '{{.Names}}' | grep -q "^matt-mongodb$" && \
-       docker ps --format '{{.Names}}' | grep -q "^matt-influxdb$"; then
+    if docker ps --format '{{.Names}}' | grep -q "^screenjournal-mongodb$" && \
+       docker ps --format '{{.Names}}' | grep -q "^screenjournal-influxdb$"; then
         echo -e "${GREEN}✅ Database containers already running${NC}"
     else
         docker-compose up -d
@@ -116,13 +116,13 @@ if [ "$USE_DOCKER" = "true" ]; then
     # Check if MongoDB is ready
     echo -e "${YELLOW}🔍 Checking MongoDB...${NC}"
     for i in {1..30}; do
-        if docker exec matt-mongodb mongosh --eval "db.adminCommand('ping')" --quiet >/dev/null 2>&1; then
+        if docker exec screenjournal-mongodb mongosh --eval "db.adminCommand('ping')" --quiet >/dev/null 2>&1; then
             echo -e "${GREEN}✅ MongoDB is ready${NC}"
             break
         fi
         if [ $i -eq 30 ]; then
             echo -e "${RED}❌ MongoDB failed to start${NC}"
-            echo -e "${YELLOW}   Check logs with: docker logs matt-mongodb${NC}"
+            echo -e "${YELLOW}   Check logs with: docker logs screenjournal-mongodb${NC}"
             exit 1
         fi
         sleep 1
@@ -137,7 +137,7 @@ if [ "$USE_DOCKER" = "true" ]; then
         fi
         if [ $i -eq 30 ]; then
             echo -e "${RED}❌ InfluxDB failed to start${NC}"
-            echo -e "${YELLOW}   Check logs with: docker logs matt-influxdb${NC}"
+            echo -e "${YELLOW}   Check logs with: docker logs screenjournal-influxdb${NC}"
             exit 1
         fi
         sleep 1
@@ -169,9 +169,9 @@ fi
 
 echo ""
 
-# Start matt-collector backend
-echo -e "${YELLOW}🔧 Starting matt-collector backend...${NC}"
-cd matt-collector
+# Start sj-collector backend
+echo -e "${YELLOW}🔧 Starting sj-collector backend...${NC}"
+cd sj-collector
 if [ ! -f .env ]; then
     echo -e "${YELLOW}⚠️  .env file not found, creating from template...${NC}"
     cp .env.example .env 2>/dev/null || cat > .env <<EOF
@@ -179,19 +179,21 @@ SERVER_HOST=0.0.0.0
 SERVER_PORT=8080
 JWT_SECRET=your-secret-key-change-in-production
 INFLUXDB2_URL=http://localhost:8086
-INFLUXDB2_TOKEN=matt-admin-token-change-in-production
-INFLUXDB2_ORG=matt-org
-INFLUXDB2_BUCKET=matt-metrics
+INFLUXDB2_TOKEN=screenjournal-admin-token-change-in-production
+INFLUXDB2_ORG=screenjournal-org
+INFLUXDB2_BUCKET=screenjournal-metrics
 STORAGE_BASE_PATH=./storage
 STORAGE_BASE_URL=http://localhost:8080/storage
 EOF
     # Update existing .env file to match docker-compose defaults if it exists
     if [ -f .env ]; then
         # Update InfluxDB settings to match docker-compose.yml defaults
-        sed -i.bak 's/^INFLUXDB2_ORG=.*/INFLUXDB2_ORG=matt-org/' .env
-        sed -i.bak 's/^INFLUXDB2_BUCKET=.*/INFLUXDB2_BUCKET=matt-metrics/' .env
-        sed -i.bak 's/^INFLUXDB2_TOKEN=.*/INFLUXDB2_TOKEN=matt-admin-token-change-in-production/' .env
+        sed -i.bak 's/^INFLUXDB2_ORG=.*/INFLUXDB2_ORG=screenjournal-org/' .env
+        sed -i.bak 's/^INFLUXDB2_BUCKET=.*/INFLUXDB2_BUCKET=screenjournal-metrics/' .env
+        sed -i.bak 's/^INFLUXDB2_TOKEN=.*/INFLUXDB2_TOKEN=screenjournal-admin-token-change-in-production/' .env
         sed -i.bak 's/^INFLUXDB2_URL=.*/INFLUXDB2_URL=http:\/\/localhost:8086/' .env
+        # Also update any old bucket names
+        sed -i.bak 's/matt-metrics/screenjournal-metrics/g' .env
         rm -f .env.bak
     fi
 fi
@@ -208,11 +210,12 @@ if port_in_use 8080; then
         echo -e "${YELLOW}   Please stop the process using port 8080 and try again${NC}"
         exit 1
     fi
+    cd ..
 else
-    go run ./cmd/server > /tmp/matt-collector.log 2>&1 &
+    go run ./cmd/server > /tmp/sj-collector.log 2>&1 &
     COLLECTOR_PID=$!
     cd ..
-    echo -e "${GREEN}✅ matt-collector started (PID: $COLLECTOR_PID)${NC}"
+    echo -e "${GREEN}✅ sj-collector started (PID: $COLLECTOR_PID)${NC}"
     
     # Wait for collector to be ready
     echo -e "${YELLOW}⏳ Waiting for collector to be ready...${NC}"
@@ -227,7 +230,7 @@ else
         fi
         if [ $i -eq 30 ]; then
             echo -e "${RED}❌ Collector failed to start${NC}"
-            echo -e "${YELLOW}   Check logs: tail -f /tmp/matt-collector.log${NC}"
+            echo -e "${YELLOW}   Check logs: tail -f /tmp/sj-collector.log${NC}"
             if [ -n "$COLLECTOR_PID" ]; then
                 kill $COLLECTOR_PID 2>/dev/null || true
             fi
@@ -237,18 +240,18 @@ else
     done
 fi
 
-# Start matt-tracker-report backend
-echo -e "${YELLOW}🔧 Starting matt-tracker-report backend...${NC}"
-cd matt-tracker-report
+# Start sj-tracker-report backend
+echo -e "${YELLOW}🔧 Starting sj-tracker-report backend...${NC}"
+cd sj-tracker-report
 if [ ! -f .env ]; then
     echo -e "${YELLOW}⚠️  .env file not found, creating from template...${NC}"
     cp .env.example .env 2>/dev/null || cat > .env <<EOF
 PORT=8085
 HOST=0.0.0.0
 INFLUXDB2_URL=http://localhost:8086
-INFLUXDB2_TOKEN=matt-admin-token-change-in-production
-INFLUXDB2_ORG=matt-org
-INFLUXDB2_BUCKET=matt-metrics
+INFLUXDB2_TOKEN=screenjournal-admin-token-change-in-production
+INFLUXDB2_ORG=screenjournal-org
+INFLUXDB2_BUCKET=screenjournal-metrics
 MONGODB_HOST=localhost
 MONGODB_PORT=27017
 MONGODB_DATABASE=reports
@@ -261,23 +264,28 @@ fi
 # Update existing .env file to match docker-compose defaults if it exists
 if [ -f .env ]; then
     # Update InfluxDB settings to match docker-compose.yml defaults
-    sed -i.bak 's/^INFLUXDB2_ORG=.*/INFLUXDB2_ORG=matt-org/' .env
-    sed -i.bak 's/^INFLUXDB2_BUCKET=.*/INFLUXDB2_BUCKET=matt-metrics/' .env
-    sed -i.bak 's/^INFLUXDB2_TOKEN=.*/INFLUXDB2_TOKEN=matt-admin-token-change-in-production/' .env
+    sed -i.bak 's/^INFLUXDB2_ORG=.*/INFLUXDB2_ORG=screenjournal-org/' .env
+    sed -i.bak 's/^INFLUXDB2_BUCKET=.*/INFLUXDB2_BUCKET=screenjournal-metrics/' .env
+    sed -i.bak 's/^INFLUXDB2_TOKEN=.*/INFLUXDB2_TOKEN=screenjournal-admin-token-change-in-production/' .env
     sed -i.bak 's/^INFLUXDB2_URL=.*/INFLUXDB2_URL=http:\/\/localhost:8086/' .env
+    # Update MongoDB settings
+    sed -i.bak 's/^MONGODB_DATABASE=.*/MONGODB_DATABASE=reports/' .env
+    sed -i.bak 's/^MONGODB_USERNAME=.*/MONGODB_USERNAME=admin/' .env
+    sed -i.bak 's/^MONGODB_PASSWORD=.*/MONGODB_PASSWORD=admin123/' .env
+    sed -i.bak 's/^MONGODB_AUTH_SOURCE=.*/MONGODB_AUTH_SOURCE=admin/' .env
     rm -f .env.bak
 fi
 go run ./cmd/server &
 REPORT_PID=$!
 cd ..
-echo -e "${GREEN}✅ matt-tracker-report started (PID: $REPORT_PID)${NC}"
+echo -e "${GREEN}✅ sj-tracker-report started (PID: $REPORT_PID)${NC}"
 
 # Wait for report service to be ready
 sleep 3
 
 # Start Python chat agent
 echo -e "${YELLOW}🤖 Starting Python chat agent...${NC}"
-cd matt-tracker-chat-agent
+cd sj-tracker-chat-agent
 
 # Check if virtual environment exists, create if not
 if [ ! -d "venv" ]; then
@@ -287,7 +295,8 @@ fi
 
 # Activate virtual environment and install dependencies
 source venv/bin/activate
-pip install -q -r requirements.txt
+# Use python3 -m pip to ensure we're using the venv's pip
+python3 -m pip install -q -r requirements.txt
 
 # Note: OPENAI_API_KEY is not required at startup
 # Users will provide their API key through the frontend interface
@@ -299,7 +308,7 @@ if [ -z "$BACKEND_URL" ]; then
 fi
 
 # Run Python agent in background
-python server.py > /tmp/matt-chat-agent.log 2>&1 &
+python server.py > /tmp/sj-chat-agent.log 2>&1 &
 CHAT_AGENT_PID=$!
 cd ..
 echo -e "${GREEN}✅ Python chat agent started (PID: $CHAT_AGENT_PID)${NC}"
@@ -309,7 +318,7 @@ sleep 2
 
 # Start frontend
 echo -e "${YELLOW}🌐 Starting frontend...${NC}"
-cd matt-tracker-frontend
+cd sj-tracker-frontend
 if [ ! -d node_modules ]; then
     echo -e "${YELLOW}📦 Installing frontend dependencies...${NC}"
     npm install
@@ -324,7 +333,7 @@ sleep 5
 
 # Start desktop app
 echo -e "${YELLOW}🖥️  Starting desktop app...${NC}"
-cd mattpm/apps/desktop
+cd screenjournal/apps/desktop
 if [ ! -d node_modules ]; then
     echo -e "${YELLOW}📦 Installing desktop app dependencies...${NC}"
     npm install

@@ -107,11 +107,11 @@ echo -e "${GREEN}✓ Docker services started${NC}\n"
 echo -e "${YELLOW}Waiting for services to be ready...${NC}"
 sleep 5
 
-# Start Go backend (matt-tracker-report)
-echo -e "${GREEN}[2/4] Starting Go backend (matt-tracker-report)...${NC}"
-cd "$SCRIPT_DIR/matt-tracker-report"
+# Start Go backend (sj-tracker-report)
+echo -e "${GREEN}[2/4] Starting Go backend (sj-tracker-report)...${NC}"
+cd "$SCRIPT_DIR/sj-tracker-report"
 if [ ! -f "go.mod" ]; then
-    echo -e "${RED}Error: matt-tracker-report/go.mod not found${NC}"
+    echo -e "${RED}Error: sj-tracker-report/go.mod not found${NC}"
     exit 1
 fi
 
@@ -127,7 +127,7 @@ sleep 3
 
 # Start Python chat agent
 echo -e "${GREEN}[3/4] Starting Python chat agent...${NC}"
-cd "$SCRIPT_DIR/matt-tracker-chat-agent"
+cd "$SCRIPT_DIR/sj-tracker-chat-agent"
 
 # Check if virtual environment exists, create if not
 if [ ! -d "venv" ]; then
@@ -156,7 +156,7 @@ echo -e "${GREEN}✓ Python chat agent started (PID: $AGENT_PID)${NC}\n"
 
 # Start Next.js frontend
 echo -e "${GREEN}[4/5] Starting Next.js frontend...${NC}"
-cd "$SCRIPT_DIR/matt-tracker-frontend"
+cd "$SCRIPT_DIR/sj-tracker-frontend"
 
 # Check if node_modules exists
 if [ ! -d "node_modules" ]; then
@@ -172,14 +172,14 @@ echo -e "${GREEN}✓ Next.js frontend started on port 3030 (PID: $FRONTEND_PID)$
 
 # Start desktop app
 echo -e "${GREEN}[5/5] Starting desktop app...${NC}"
-cd "$SCRIPT_DIR/mattpm/apps/desktop"
+cd "$SCRIPT_DIR/screenjournal/apps/desktop"
 
 # Check if node_modules exists
 if [ ! -d "node_modules" ]; then
     echo -e "${YELLOW}Installing desktop app dependencies...${NC}"
-    cd "$SCRIPT_DIR/mattpm"
+    cd "$SCRIPT_DIR/screenjournal"
     npm install
-    cd "$SCRIPT_DIR/mattpm/apps/desktop"
+    cd "$SCRIPT_DIR/screenjournal/apps/desktop"
 fi
 
 # Set environment variable for service management

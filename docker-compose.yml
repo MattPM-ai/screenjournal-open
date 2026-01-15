@@ -2,7 +2,7 @@ services:
   # MongoDB for report caching and storage
   mongodb:
     image: mongo:7.0
-    container_name: matt-mongodb
+    container_name: screenjournal-mongodb
     restart: unless-stopped
     ports:
       - "27017:27017"
@@ -13,7 +13,7 @@ services:
     volumes:
       - mongodb_data:/data/db
     networks:
-      - matt-network
+      - screenjournal-network
     healthcheck:
       test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
       interval: 10s
@@ -23,7 +23,7 @@ services:
   # InfluxDB for time-series data
   influxdb:
     image: influxdb:2.7
-    container_name: matt-influxdb
+    container_name: screenjournal-influxdb
     restart: unless-stopped
     ports:
       - "8086:8086"
@@ -31,13 +31,13 @@ services:
       DOCKER_INFLUXDB_INIT_MODE: setup
       DOCKER_INFLUXDB_INIT_USERNAME: admin
       DOCKER_INFLUXDB_INIT_PASSWORD: admin123
-      DOCKER_INFLUXDB_INIT_ORG: matt-org
-      DOCKER_INFLUXDB_INIT_BUCKET: matt-metrics
-      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: matt-admin-token-change-in-production
+      DOCKER_INFLUXDB_INIT_ORG: screenjournal-org
+      DOCKER_INFLUXDB_INIT_BUCKET: screenjournal-metrics
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: screenjournal-admin-token-change-in-production
     volumes:
       - influxdb_data:/var/lib/influxdb2
     networks:
-      - matt-network
+      - screenjournal-network
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8086/health"]
       interval: 10s
@@ -51,6 +51,6 @@ volumes:
     driver: local
 
 networks:
-  matt-network:
+  screenjournal-network:
     driver: bridge
 

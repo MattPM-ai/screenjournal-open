@@ -2,7 +2,7 @@
 
 ## Issues Identified
 
-### 1. ✅ FIXED: Compilation Error in matt-collector
+### 1. ✅ FIXED: Compilation Error in sj-collector
 **Error**: `internal/services/s3.go:26:31: undefined: config.S3Config`
 
 **Root Cause**: The `s3.go` file still referenced `config.S3Config` which was removed when we switched to local storage.
@@ -16,7 +16,7 @@
 ### 2. ⚠️ MongoDB Still Connecting (Not Using Embedded Mode)
 **Observation**: Lines 74-76 show the report service successfully connecting to MongoDB:
 ```
-2026/01/09 15:44:35 Initializing MongoDB connection (Host: localhost, Port: 27017, Database: mattpm-reports)
+2026/01/09 15:44:35 Initializing MongoDB connection (Host: localhost, Port: 27017, Database: screenjournal-reports)
 2026/01/09 15:44:35 Successfully connected to MongoDB for report caching
 ```
 
@@ -31,13 +31,13 @@
 
 **Next Steps**: 
 - Implement SQLite replacement for MongoDB (see `DISTRIBUTION.md`)
-- Update `matt-tracker-report` to check `USE_EMBEDDED_DB` environment variable
+- Update `sj-tracker-report` to check `USE_EMBEDDED_DB` environment variable
 - Create SQLite client that implements the same interface as MongoDB client
 
 ---
 
 ### 3. ⚠️ InfluxDB Status Unknown
-**Observation**: Cannot verify InfluxDB connection because `matt-collector` failed to compile.
+**Observation**: Cannot verify InfluxDB connection because `sj-collector` failed to compile.
 
 **Root Cause**: Compilation error prevented the collector from starting.
 

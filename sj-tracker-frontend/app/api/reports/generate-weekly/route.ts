@@ -27,17 +27,9 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL
 
 export async function POST(request: NextRequest) {
   try {
-    // Get token from request cookies (server-side)
-    const token = request.cookies.get('accessToken')?.value
-    if (!token) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      )
-    }
-
+    // No authentication required for open-source local version
     const body = await request.json()
-    const { accountId, users, org, orgId, weekStartDate } = body
+    const { accountId, users, org, orgId, weekStartDate, geminiApiKey } = body
 
     // Validate and normalize accountId (handle both string and number)
     let normalizedAccountId: number
@@ -48,9 +40,9 @@ export async function POST(request: NextRequest) {
       )
     }
     normalizedAccountId = typeof accountId === 'string' ? Number(accountId) : accountId
-    if (isNaN(normalizedAccountId) || normalizedAccountId <= 0) {
+    if (isNaN(normalizedAccountId) || normalizedAccountId < 0) {
       return NextResponse.json(
-        { error: 'accountId is required and must be a valid positive number' },
+        { error: 'accountId is required and must be a valid non-negative number' },
         { status: 400 }
       )
     }
@@ -87,9 +79,9 @@ export async function POST(request: NextRequest) {
         )
       }
       normalizedUserId = typeof user.id === 'string' ? Number(user.id) : user.id
-      if (isNaN(normalizedUserId) || normalizedUserId <= 0) {
+      if (isNaN(normalizedUserId) || normalizedUserId < 0) {
         return NextResponse.json(
-          { error: `users[${i}].id is required and must be a valid positive number` },
+          { error: `users[${i}].id is required and must be a valid non-negative number` },
           { status: 400 }
         )
       }
@@ -115,9 +107,9 @@ export async function POST(request: NextRequest) {
       )
     }
     normalizedOrgId = typeof orgId === 'string' ? Number(orgId) : orgId
-    if (isNaN(normalizedOrgId) || normalizedOrgId <= 0) {
+    if (isNaN(normalizedOrgId) || normalizedOrgId < 0) {
       return NextResponse.json(
-        { error: 'orgId is required and must be a valid positive number' },
+        { error: 'orgId is required and must be a valid non-negative number' },
         { status: 400 }
       )
     }
@@ -143,7 +135,7 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        // No Authorization header needed for local version
       },
       body: JSON.stringify({
         accountId: normalizedAccountId,
@@ -151,6 +143,7 @@ export async function POST(request: NextRequest) {
         org: org.trim(),
         orgId: normalizedOrgId,
         weekStartDate,
+        geminiApiKey: geminiApiKey?.trim() || '',
       }),
     })
 

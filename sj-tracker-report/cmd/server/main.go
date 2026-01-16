@@ -48,8 +48,7 @@ func main() {
 	// Initialize services
 	dataService := services.NewDataService(influxClient)
 	aiService := services.NewAIService(
-		cfg.OpenAI.APIKey,
-		cfg.OpenAI,
+		cfg.OpenAI, // Still using OpenAI config struct for model/temperature settings
 		"schemas/report_schema.json",
 	)
 	reportService := services.NewReportService(dataService, aiService, mongoClient)

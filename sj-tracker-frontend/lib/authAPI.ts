@@ -115,7 +115,7 @@ const refreshToken = async (): Promise<string | null> => {
 }
 
 /**
- * Make authenticated request with automatic token refresh
+ * Make API request (no authentication required for open-source local version)
  * 
  * INPUTS:
  * - url: string - The API endpoint URL
@@ -123,147 +123,37 @@ const refreshToken = async (): Promise<string | null> => {
  * 
  * OUTPUTS:
  * - Response - The fetch response
- * 
- * ERROR HANDLING:
- * - Automatically refreshes token on 401
- * - Retries request with new token
- * - Throws error if refresh fails
  */
 export const authenticatedFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
-  let token = getAccessToken()
-  
-  // If no access token but we have a refresh token, try to refresh first
-  if (!token) {
-    const refreshTokenValue = getCookie('refreshToken')
-    if (refreshTokenValue) {
-      try {
-        const newToken = await refreshToken()
-        if (newToken) {
-          token = newToken
-        } else {
-          throw new Error('No access token available')
-        }
-      } catch (error) {
-        console.error('Token refresh failed:', error)
-        throw new Error('No access token available')
-      }
-    } else {
-      throw new Error('No access token available')
-    }
-
-  }
-
-  // Add token to headers
-  const response = await fetch(url, {
+  // Simple fetch without authentication for open-source local version
+  return fetch(url, {
     ...options,
     headers: {
       ...options.headers,
-      'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
   })
-
-  // Handle token expiration
-  if (response.status === 401) {
-    const newToken = await refreshToken()
-    if (newToken) {
-      // Retry original request with new token
-      return fetch(url, {
-        ...options,
-        headers: {
-          ...options.headers,
-          'Authorization': `Bearer ${newToken}`,
-          'Content-Type': 'application/json',
-        },
-      })
-    } else {
-      throw new Error('Authentication failed - refresh token expired')
-    }
-  }
-
-  return response
 }
 
 /**
- * Check if user is authenticated synchronously
+ * Check if user is authenticated (always true for open-source local version)
  */
 export const isAuthenticatedSync = (): boolean => {
-  const accessToken = getAccessToken()
-  if (!accessToken) {
-    return false
-  }
-  
-  // Check if JWT token is expired
-  try {
-    const payload = JSON.parse(atob(accessToken.split('.')[1]))
-    const isExpired = payload.exp * 1000 <= Date.now()
-    return !isExpired
-  } catch (error) {
-    return false
-  }
+  return true // No authentication required for open-source local version
 }
 
 /**
- * Check if user is authenticated with smart refresh logic
+ * Check if user is authenticated (always true for open-source local version)
  */
 export const isAuthenticated = async (): Promise<boolean> => {
-  const accessToken = getAccessToken()
-  const refreshTokenValue = getCookie('refreshToken')
-  
-  // If we have no access token but have a refresh token, try to refresh
-  if (!accessToken && refreshTokenValue) {
-    try {
-      const newToken = await refreshToken()
-      return newToken !== null
-    } catch (error) {
-      return false
-    }
-  }
-  
-  // If we have no access token and no refresh token, user is not authenticated
-  if (!accessToken) {
-    return false
-  }
-  
-  // Check if token is expired locally first
-  try {
-    const payload = JSON.parse(atob(accessToken.split('.')[1]))
-    const isExpired = payload.exp * 1000 <= Date.now()
-    
-    if (!isExpired) {
-      return true
-    }
-    
-    // Token is expired, try to refresh
-    if (refreshTokenValue) {
-      try {
-        const newToken = await refreshToken()
-        return newToken !== null
-      } catch (error) {
-        return false
-      }
-    }
-    
-    return false
-  } catch (error) {
-    return false
-  }
+  return true // No authentication required for open-source local version
 }
 
 /**
- * Check if user is authenticated and refresh if needed
- * This is the main function that should be used for authentication checks
+ * Check if user is authenticated (always true for open-source local version)
  */
 export const checkAuthentication = async (): Promise<boolean> => {
-  // First check synchronously for immediate response
-  const syncResult = isAuthenticatedSync()
-  if (syncResult) {
-    return true
-  }
-  
-  // If we get here, either no token, token is expired, or token is malformed
-  // Try to refresh the token
-  return await isAuthenticated()
+  return true // No authentication required for open-source local version
 }
 
 /**
@@ -402,15 +292,50 @@ export interface ProfileResponse {
 }
 
 export const getProfile = async (): Promise<User> => {
-  const response = await authenticatedFetch(`${API_BASE_URL}/users/profile`)
-  
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}))
-    throw new Error(errorData.message || 'Failed to fetch profile')
+  // For open-source local version, return a default user if profile endpoint is not available
+  // If API_BASE_URL is not set, return default user immediately
+  if (!API_BASE_URL || API_BASE_URL === 'undefined') {
+    return {
+      id: 0,
+      email: 'local@screenjournal.local',
+      name: 'Local User',
+      account_id: 0, // Default account ID for local version
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      owner: true,
+    }
   }
+  
+  try {
+    const response = await authenticatedFetch(`${API_BASE_URL}/users/profile`)
+    
+    if (!response.ok) {
+      // If profile endpoint fails, return default user for local version
+      return {
+        id: 0,
+        email: 'local@screenjournal.local',
+        name: 'Local User',
+        account_id: 0, // Default account ID for local version
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        owner: true,
+      }
+    }
 
-  const profileData: ProfileResponse = await response.json()
-  return profileData.data
+    const profileData: ProfileResponse = await response.json()
+    return profileData.data
+  } catch (error) {
+    // Return default user if profile endpoint is not available
+    return {
+      id: 0,
+      email: 'local@screenjournal.local',
+      name: 'Local User',
+      account_id: 0, // Default account ID for local version
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      owner: true,
+    }
+  }
 }
 
 /**

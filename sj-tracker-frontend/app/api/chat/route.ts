@@ -134,7 +134,10 @@ export async function POST(request: NextRequest) {
 
     if (error instanceof TypeError && error.message.includes('fetch')) {
       return NextResponse.json(
-        { error: 'Failed to connect to webhook service' },
+        { 
+          error: 'Failed to connect to chat agent service',
+          details: `Could not reach chat agent at ${CHAT_AGENT_URL}. Please ensure the chat agent service is running.`
+        },
         { status: 503 }
       )
     }

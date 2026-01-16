@@ -30,14 +30,7 @@ export async function GET(
   { params }: { params: { accountId: string } }
 ) {
   try {
-    // Get token from request cookies (server-side)
-    const token = request.cookies.get('accessToken')?.value
-    if (!token) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      )
-    }
+    // No authentication required for open-source local version
 
     const { accountId } = params
 
@@ -54,7 +47,7 @@ export async function GET(
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        // No Authorization header needed for local version
       },
     })
 

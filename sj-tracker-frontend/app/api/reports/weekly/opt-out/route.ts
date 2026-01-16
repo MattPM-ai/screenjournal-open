@@ -27,14 +27,7 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL
 
 export async function POST(request: NextRequest) {
   try {
-    // Get token from request cookies (server-side)
-    const token = request.cookies.get('accessToken')?.value
-    if (!token) {
-      return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      )
-    }
+    // No authentication required for open-source local version
 
     const body = await request.json()
     const { accountId, orgId } = body
@@ -59,7 +52,7 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+        // No Authorization header needed for local version
       },
       body: JSON.stringify({
         accountId,

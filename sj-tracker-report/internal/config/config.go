@@ -120,9 +120,8 @@ func ValidateConfig(config *Config) error {
 	if config.InfluxDB.Org == "" {
 		return fmt.Errorf("INFLUXDB2_ORG is required")
 	}
-	if config.OpenAI.APIKey == "" {
-		return fmt.Errorf("OPENAI_API_KEY is required")
-	}
+	// OpenAI API key is no longer required - users provide Gemini API keys per-request
+	// The OpenAI config struct is still used for model/temperature settings
 	return nil
 }
 

@@ -117,7 +117,7 @@ func (s *ReportService) GenerateReport(request models.GenerateReportRequest) (*m
 
 		// Use AI to enhance this user's report
 		rawDataContext := s.dataService.AggregateDataForAI(afkData, windowData, appData, metricsData, timelineData)
-		err = s.aiService.EnhanceUserReportWithAI(&userReport, rawDataContext, request, userReq.Name)
+		err = s.aiService.EnhanceUserReportWithAI(request.GeminiAPIKey, &userReport, rawDataContext, request, userReq.Name)
 		if err != nil {
 			// Log error but don't fail - we still have a valid report structure
 			fmt.Printf("WARNING: Failed to enhance report with AI for user %s (ID: %d): %v\n", userReq.Name, userReq.ID, err)
@@ -138,7 +138,7 @@ func (s *ReportService) GenerateReport(request models.GenerateReportRequest) (*m
 		org.UserRanking = userRanking
 
 		// Enhance rankings with AI-generated insights
-		err = s.aiService.EnhanceRankingsWithAI(userRanking, allUsers, request)
+		err = s.aiService.EnhanceRankingsWithAI(request.GeminiAPIKey, userRanking, allUsers, request)
 		if err != nil {
 			// Log error but don't fail - rankings are still valid
 			fmt.Printf("WARNING: Failed to enhance rankings with AI: %v\n", err)
@@ -231,12 +231,13 @@ func (s *ReportService) GenerateWeeklyReport(request models.GenerateWeeklyReport
 
 	// Create a temporary GenerateReportRequest for buildUserReportFromData
 	tempRequest := models.GenerateReportRequest{
-		AccountID: request.AccountID,
-		Users:     request.Users,
-		Org:       request.Org,
-		OrgID:     request.OrgID,
-		StartDate: startDateStr,
-		EndDate:   endDateStr,
+		AccountID:    request.AccountID,
+		Users:        request.Users,
+		Org:          request.Org,
+		OrgID:        request.OrgID,
+		StartDate:    startDateStr,
+		EndDate:      endDateStr,
+		GeminiAPIKey: request.GeminiAPIKey,
 	}
 
 	// Collect data from all users (for structure) but we'll generate org-level summaries
@@ -282,7 +283,7 @@ func (s *ReportService) GenerateWeeklyReport(request models.GenerateWeeklyReport
 		org.UserRanking = userRanking
 
 		// Enhance rankings with AI-generated insights
-		err = s.aiService.EnhanceRankingsWithAI(userRanking, allUsersData, tempRequest)
+		err = s.aiService.EnhanceRankingsWithAI(request.GeminiAPIKey, userRanking, allUsersData, tempRequest)
 		if err != nil {
 			// Log error but don't fail - rankings are still valid
 			fmt.Printf("WARNING: Failed to enhance rankings with AI: %v\n", err)
@@ -306,7 +307,7 @@ func (s *ReportService) GenerateWeeklyReport(request models.GenerateWeeklyReport
 
 	// Generate AI-enhanced summaries
 	combinedRawDataContext := strings.Join(allRawDataContexts, "\n\n--- USER SEPARATOR ---\n\n")
-	err = s.aiService.EnhanceWeeklyReportSummaries(report, weeklySummary, weeklyUserSummaries, combinedRawDataContext, request, startDateStr, endDateStr)
+	err = s.aiService.EnhanceWeeklyReportSummaries(request.GeminiAPIKey, report, weeklySummary, weeklyUserSummaries, combinedRawDataContext, request, startDateStr, endDateStr)
 	if err != nil {
 		// Log error but don't fail - we still have a valid report structure
 		fmt.Printf("WARNING: Failed to enhance weekly report summaries with AI: %v\n", err)

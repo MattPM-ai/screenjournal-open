@@ -1,9 +1,12 @@
 package services
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"sj-tracker-report/internal/config"
 	"sj-tracker-report/internal/models"
 	"sj-tracker-report/internal/utils"
@@ -11,8 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/sashabaranov/go-openai"
 )
 
 func min(a, b int) int {
@@ -155,25 +156,120 @@ func fixTypes(v interface{}) {
 	}
 }
 
-// AIService handles OpenAI API interactions
+// AIService handles Gemini API interactions
 type AIService struct {
-	client   *openai.Client
-	config   config.OpenAIConfig
+	config     config.OpenAIConfig // Reusing config struct for model/temperature settings
 	schemaPath string
 }
 
-// NewAIService creates a new AI service
-func NewAIService(apiKey string, cfg config.OpenAIConfig, schemaPath string) *AIService {
-	client := openai.NewClient(apiKey)
+// NewAIService creates a new AI service (no longer needs API key at initialization)
+func NewAIService(cfg config.OpenAIConfig, schemaPath string) *AIService {
 	return &AIService{
-		client:     client,
 		config:     cfg,
 		schemaPath: schemaPath,
 	}
 }
 
-// GenerateReport generates a report using OpenAI with structured outputs
-func (s *AIService) GenerateReport(dataContext string, request models.GenerateReportRequest) (*models.Report, error) {
+// Gemini API request/response structures
+type geminiRequest struct {
+	Contents []geminiContent `json:"contents"`
+	GenerationConfig geminiGenerationConfig `json:"generationConfig"`
+}
+
+type geminiContent struct {
+	Parts []geminiPart `json:"parts"`
+}
+
+type geminiPart struct {
+	Text string `json:"text"`
+}
+
+type geminiGenerationConfig struct {
+	Temperature     float64 `json:"temperature"`
+	MaxOutputTokens int     `json:"maxOutputTokens"`
+	ResponseMimeType string `json:"responseMimeType,omitempty"`
+}
+
+type geminiResponse struct {
+	Candidates []geminiCandidate `json:"candidates"`
+}
+
+type geminiCandidate struct {
+	Content geminiContent `json:"content"`
+}
+
+// callGeminiAPI makes an HTTP request to the Gemini API
+func callGeminiAPI(apiKey string, model string, systemPrompt string, userPrompt string, temperature float64, maxTokens int) (string, error) {
+	// Combine system and user prompts (Gemini doesn't have separate system/user roles in the same way)
+	fullPrompt := systemPrompt + "\n\n" + userPrompt
+	
+	// Default model if not specified
+	if model == "" {
+		model = "gemini-2.0-flash-exp"
+	}
+	
+	// Default max tokens
+	if maxTokens <= 0 {
+		maxTokens = 8192
+	}
+	
+	// Build request
+	reqBody := geminiRequest{
+		Contents: []geminiContent{
+			{
+				Parts: []geminiPart{
+					{Text: fullPrompt},
+				},
+			},
+		},
+		GenerationConfig: geminiGenerationConfig{
+			Temperature:     temperature,
+			MaxOutputTokens:  maxTokens,
+			ResponseMimeType: "application/json",
+		},
+	}
+	
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+	
+	// Make HTTP request
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", model, apiKey)
+	req, err := http.NewRequestWithContext(context.Background(), "POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+	
+	req.Header.Set("Content-Type", "application/json")
+	
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("Gemini API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("Gemini API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+	}
+	
+	// Parse response
+	var geminiResp geminiResponse
+	if err := json.NewDecoder(resp.Body).Decode(&geminiResp); err != nil {
+		return "", fmt.Errorf("failed to parse Gemini response: %w", err)
+	}
+	
+	if len(geminiResp.Candidates) == 0 || len(geminiResp.Candidates[0].Content.Parts) == 0 {
+		return "", fmt.Errorf("no response from Gemini")
+	}
+	
+	return geminiResp.Candidates[0].Content.Parts[0].Text, nil
+}
+
+// GenerateReport generates a report using Gemini with structured outputs
+func (s *AIService) GenerateReport(apiKey string, dataContext string, request models.GenerateReportRequest) (*models.Report, error) {
 	// Build system prompt
 	systemPrompt, err := s.buildSystemPrompt()
 	if err != nil {
@@ -194,46 +290,26 @@ func (s *AIService) GenerateReport(dataContext string, request models.GenerateRe
 		return nil, fmt.Errorf("failed to parse schema: %w", err)
 	}
 
-	// Create chat completion request
-	// Use JSON object mode (JSON schema mode has type issues with the library)
-	// Set MaxTokens to 0 to remove limit, or use a very high value
+	// Set MaxTokens - default to 8192 for Gemini
 	maxTokens := s.config.MaxTokens
 	if maxTokens <= 0 {
-		maxTokens = 16000 // Very high limit for large reports
+		maxTokens = 8192
 	}
 	
-	req := openai.ChatCompletionRequest{
-		Model:       s.config.Model,
-		Temperature: float32(s.config.Temperature),
-		MaxTokens:   maxTokens,
-		Messages: []openai.ChatCompletionMessage{
-			{
-				Role:    openai.ChatMessageRoleSystem,
-				Content: systemPrompt,
-			},
-			{
-				Role:    openai.ChatMessageRoleUser,
-				Content: userPrompt + "\n\nIMPORTANT: Respond with ONLY valid JSON matching the required structure. No markdown, no code fences, no explanatory text. The organizations array MUST be present, non-null, and non-empty. Generate the complete report structure even if data is limited.",
-			},
-		},
-		ResponseFormat: &openai.ChatCompletionResponseFormat{
-			Type: openai.ChatCompletionResponseFormatTypeJSONObject,
-		},
+	// Use Gemini model (default to gemini-2.0-flash-exp)
+	model := s.config.Model
+	if model == "" || strings.HasPrefix(model, "gpt-") {
+		model = "gemini-2.0-flash-exp"
 	}
+	
+	// Build full prompt with JSON requirement
+	fullUserPrompt := userPrompt + "\n\nIMPORTANT: Respond with ONLY valid JSON matching the required structure. No markdown, no code fences, no explanatory text. The organizations array MUST be present, non-null, and non-empty. Generate the complete report structure even if data is limited."
 
-	// Make API call
-	ctx := context.Background()
-	resp, err := s.client.CreateChatCompletion(ctx, req)
+	// Make Gemini API call
+	reportJSON, err := callGeminiAPI(apiKey, model, systemPrompt, fullUserPrompt, s.config.Temperature, maxTokens)
 	if err != nil {
-		return nil, fmt.Errorf("OpenAI API error: %w", err)
+		return nil, fmt.Errorf("Gemini API error: %w", err)
 	}
-
-	if len(resp.Choices) == 0 {
-		return nil, fmt.Errorf("no response from OpenAI")
-	}
-
-	// Extract JSON from response
-	reportJSON := resp.Choices[0].Message.Content
 	
 	// Clean up the JSON - remove markdown code fences if present
 	reportJSON = strings.TrimSpace(reportJSON)
@@ -300,6 +376,7 @@ func (s *AIService) GenerateReport(dataContext string, request models.GenerateRe
 
 // EnhanceReportWithAI enhances an existing report structure with AI-generated text fields
 func (s *AIService) EnhanceReportWithAI(
+	apiKey string,
 	report *models.Report,
 	rawDataContext string,
 	request models.GenerateReportRequest,
@@ -482,38 +559,17 @@ IMPORTANT:
 - Include specific app names in discrepancy descriptions
 - Use exact times from the hourly breakdown data`, string(reportJSON), appUsageSummary, rawDataContext)
 
-	// Call OpenAI
-	req := openai.ChatCompletionRequest{
-		Model:       s.config.Model,
-		Temperature: float32(s.config.Temperature),
-		MaxTokens:   4000,
-		Messages: []openai.ChatCompletionMessage{
-			{
-				Role:    openai.ChatMessageRoleSystem,
-				Content: "You are a productivity analyst. Generate concise, professional summaries and identify discrepancies in work activity data.",
-			},
-			{
-				Role:    openai.ChatMessageRoleUser,
-				Content: prompt,
-			},
-		},
-		ResponseFormat: &openai.ChatCompletionResponseFormat{
-			Type: openai.ChatCompletionResponseFormatTypeJSONObject,
-		},
+	// Call Gemini API
+	model := s.config.Model
+	if model == "" || strings.HasPrefix(model, "gpt-") {
+		model = "gemini-2.0-flash-exp"
 	}
-
-	ctx := context.Background()
-	resp, err := s.client.CreateChatCompletion(ctx, req)
+	
+	systemPrompt := "You are a productivity analyst. Generate concise, professional summaries and identify discrepancies in work activity data."
+	responseJSON, err := callGeminiAPI(apiKey, model, systemPrompt, prompt, s.config.Temperature, 4000)
 	if err != nil {
-		return fmt.Errorf("OpenAI API error: %w", err)
+		return fmt.Errorf("Gemini API error: %w", err)
 	}
-
-	if len(resp.Choices) == 0 {
-		return fmt.Errorf("no response from OpenAI")
-	}
-
-	// Parse response
-	responseJSON := resp.Choices[0].Message.Content
 	responseJSON = strings.TrimSpace(responseJSON)
 	if strings.HasPrefix(responseJSON, "```json") {
 		responseJSON = strings.TrimPrefix(responseJSON, "```json")
@@ -573,6 +629,7 @@ IMPORTANT:
 
 // EnhanceUserReportWithAI enhances a single user's report with AI-generated text fields
 func (s *AIService) EnhanceUserReportWithAI(
+	apiKey string,
 	user *models.User,
 	rawDataContext string,
 	request models.GenerateReportRequest,
@@ -769,38 +826,17 @@ IMPORTANT:
 - Include specific app names in discrepancy descriptions
 - Use exact times from the hourly breakdown data`, string(reportJSON), appUsageSummary, rawDataContext)
 
-	// Call OpenAI
-	req := openai.ChatCompletionRequest{
-		Model:       s.config.Model,
-		Temperature: float32(s.config.Temperature),
-		MaxTokens:   4000,
-		Messages: []openai.ChatCompletionMessage{
-			{
-				Role:    openai.ChatMessageRoleSystem,
-				Content: "You are a productivity analyst. Generate concise, professional summaries and identify discrepancies in work activity data.",
-			},
-			{
-				Role:    openai.ChatMessageRoleUser,
-				Content: prompt,
-			},
-		},
-		ResponseFormat: &openai.ChatCompletionResponseFormat{
-			Type: openai.ChatCompletionResponseFormatTypeJSONObject,
-		},
+	// Call Gemini API
+	model := s.config.Model
+	if model == "" || strings.HasPrefix(model, "gpt-") {
+		model = "gemini-2.0-flash-exp"
 	}
-
-	ctx := context.Background()
-	resp, err := s.client.CreateChatCompletion(ctx, req)
+	
+	systemPrompt := "You are a productivity analyst. Generate concise, professional summaries and identify discrepancies in work activity data."
+	responseJSON, err := callGeminiAPI(apiKey, model, systemPrompt, prompt, s.config.Temperature, 4000)
 	if err != nil {
-		return fmt.Errorf("OpenAI API error: %w", err)
+		return fmt.Errorf("Gemini API error: %w", err)
 	}
-
-	if len(resp.Choices) == 0 {
-		return fmt.Errorf("no response from OpenAI")
-	}
-
-	// Parse response
-	responseJSON := resp.Choices[0].Message.Content
 	responseJSON = strings.TrimSpace(responseJSON)
 	if strings.HasPrefix(responseJSON, "```json") {
 		responseJSON = strings.TrimPrefix(responseJSON, "```json")
@@ -855,6 +891,7 @@ IMPORTANT:
 
 // EnhanceWeeklyUserReportWithAI enhances a single user's weekly report with AI-generated text fields
 func (s *AIService) EnhanceWeeklyUserReportWithAI(
+	apiKey string,
 	user *models.User,
 	rawDataContext string,
 	request models.GenerateWeeklyReportRequest,
@@ -1056,38 +1093,17 @@ IMPORTANT:
 - Use exact times from the hourly breakdown data
 - Focus on WEEKLY patterns and trends suitable for organizational email reports`, string(reportJSON), appUsageSummary, rawDataContext)
 
-	// Call OpenAI
-	req := openai.ChatCompletionRequest{
-		Model:       s.config.Model,
-		Temperature: float32(s.config.Temperature),
-		MaxTokens:   4000,
-		Messages: []openai.ChatCompletionMessage{
-			{
-				Role:    openai.ChatMessageRoleSystem,
-				Content: "You are a productivity analyst generating weekly organizational reports. Generate concise, professional summaries and identify discrepancies in work activity data for weekly email delivery to organization management.",
-			},
-			{
-				Role:    openai.ChatMessageRoleUser,
-				Content: prompt,
-			},
-		},
-		ResponseFormat: &openai.ChatCompletionResponseFormat{
-			Type: openai.ChatCompletionResponseFormatTypeJSONObject,
-		},
+	// Call Gemini API
+	model := s.config.Model
+	if model == "" || strings.HasPrefix(model, "gpt-") {
+		model = "gemini-2.0-flash-exp"
 	}
-
-	ctx := context.Background()
-	resp, err := s.client.CreateChatCompletion(ctx, req)
+	
+	systemPrompt := "You are a productivity analyst generating weekly organizational reports. Generate concise, professional summaries and identify discrepancies in work activity data for weekly email delivery to organization management."
+	responseJSON, err := callGeminiAPI(apiKey, model, systemPrompt, prompt, s.config.Temperature, 4000)
 	if err != nil {
-		return fmt.Errorf("OpenAI API error: %w", err)
+		return fmt.Errorf("Gemini API error: %w", err)
 	}
-
-	if len(resp.Choices) == 0 {
-		return fmt.Errorf("no response from OpenAI")
-	}
-
-	// Parse response
-	responseJSON := resp.Choices[0].Message.Content
 	responseJSON = strings.TrimSpace(responseJSON)
 	if strings.HasPrefix(responseJSON, "```json") {
 		responseJSON = strings.TrimPrefix(responseJSON, "```json")
@@ -1142,6 +1158,7 @@ IMPORTANT:
 
 // EnhanceWeeklyOrganizationReportWithAI enhances the weekly report with organization-level summaries and conclusions
 func (s *AIService) EnhanceWeeklyOrganizationReportWithAI(
+	apiKey string,
 	report *models.Report,
 	rawDataContext string,
 	request models.GenerateWeeklyReportRequest,
@@ -1274,38 +1291,17 @@ IMPORTANT:
 		appUsageSummary,
 		rawDataContext)
 
-	// Call OpenAI
-	req := openai.ChatCompletionRequest{
-		Model:       s.config.Model,
-		Temperature: float32(s.config.Temperature),
-		MaxTokens:   4000,
-		Messages: []openai.ChatCompletionMessage{
-			{
-				Role:    openai.ChatMessageRoleSystem,
-				Content: "You are a productivity analyst generating weekly organizational reports for email delivery to organization management. Generate concise, professional organization-level summaries and insights.",
-			},
-			{
-				Role:    openai.ChatMessageRoleUser,
-				Content: prompt,
-			},
-		},
-		ResponseFormat: &openai.ChatCompletionResponseFormat{
-			Type: openai.ChatCompletionResponseFormatTypeJSONObject,
-		},
+	// Call Gemini API
+	model := s.config.Model
+	if model == "" || strings.HasPrefix(model, "gpt-") {
+		model = "gemini-2.0-flash-exp"
 	}
-
-	ctx := context.Background()
-	resp, err := s.client.CreateChatCompletion(ctx, req)
+	
+	systemPrompt := "You are a productivity analyst generating weekly organizational reports for email delivery to organization management. Generate concise, professional organization-level summaries and insights."
+	responseJSON, err := callGeminiAPI(apiKey, model, systemPrompt, prompt, s.config.Temperature, 4000)
 	if err != nil {
-		return fmt.Errorf("OpenAI API error: %w", err)
+		return fmt.Errorf("Gemini API error: %w", err)
 	}
-
-	if len(resp.Choices) == 0 {
-		return fmt.Errorf("no response from OpenAI")
-	}
-
-	// Parse response
-	responseJSON := resp.Choices[0].Message.Content
 	responseJSON = strings.TrimSpace(responseJSON)
 	if strings.HasPrefix(responseJSON, "```json") {
 		responseJSON = strings.TrimPrefix(responseJSON, "```json")
@@ -1362,6 +1358,7 @@ IMPORTANT:
 
 // EnhanceWeeklyReportSummaries enhances weekly report with organization summary and user summaries
 func (s *AIService) EnhanceWeeklyReportSummaries(
+	apiKey string,
 	report *models.Report,
 	weeklySummary *models.WeeklyOrganizationSummary,
 	userSummaries []models.WeeklyUserSummary,
@@ -1466,38 +1463,17 @@ RESPOND WITH ONLY JSON in this exact format:
 		appUsageSummary,
 		rawDataContext)
 
-	// Call OpenAI
-	req := openai.ChatCompletionRequest{
-		Model:       s.config.Model,
-		Temperature: float32(s.config.Temperature),
-		MaxTokens:   3000,
-		Messages: []openai.ChatCompletionMessage{
-			{
-				Role:    openai.ChatMessageRoleSystem,
-				Content: "You are a productivity analyst generating weekly organizational reports for email delivery to organization management. Generate concise, professional summaries focusing on actionable insights.",
-			},
-			{
-				Role:    openai.ChatMessageRoleUser,
-				Content: prompt,
-			},
-		},
-		ResponseFormat: &openai.ChatCompletionResponseFormat{
-			Type: openai.ChatCompletionResponseFormatTypeJSONObject,
-		},
+	// Call Gemini API
+	model := s.config.Model
+	if model == "" || strings.HasPrefix(model, "gpt-") {
+		model = "gemini-2.0-flash-exp"
 	}
-
-	ctx := context.Background()
-	resp, err := s.client.CreateChatCompletion(ctx, req)
+	
+	systemPrompt := "You are a productivity analyst generating weekly organizational reports for email delivery to organization management. Generate concise, professional summaries focusing on actionable insights."
+	responseJSON, err := callGeminiAPI(apiKey, model, systemPrompt, prompt, s.config.Temperature, 3000)
 	if err != nil {
-		return fmt.Errorf("OpenAI API error: %w", err)
+		return fmt.Errorf("Gemini API error: %w", err)
 	}
-
-	if len(resp.Choices) == 0 {
-		return fmt.Errorf("no response from OpenAI")
-	}
-
-	// Parse response
-	responseJSON := resp.Choices[0].Message.Content
 	responseJSON = strings.TrimSpace(responseJSON)
 	if strings.HasPrefix(responseJSON, "```json") {
 		responseJSON = strings.TrimPrefix(responseJSON, "```json")
@@ -1674,6 +1650,7 @@ func (s *AIService) extractAppUsageSummary(report *models.Report) string {
 
 // EnhanceRankingsWithAI enhances user rankings with AI-generated insights and summary
 func (s *AIService) EnhanceRankingsWithAI(
+	apiKey string,
 	ranking *models.UserRanking,
 	users []models.User,
 	request models.GenerateReportRequest,
@@ -1750,32 +1727,28 @@ IMPORTANT:
 - Highlight both strengths and areas for improvement`, userContext.String(), request.StartDate, request.EndDate)
 
 	// Call OpenAI
-	req := openai.ChatCompletionRequest{
-		Model:       s.config.Model,
-		Temperature: float32(s.config.Temperature),
-		MaxTokens:   2000,
-		Messages: []openai.ChatCompletionMessage{
-			{
-				Role:    openai.ChatMessageRoleSystem,
-				Content: "You are a productivity analyst providing comparative insights on user performance rankings. Always return valid JSON.",
-			},
-			{
-				Role:    openai.ChatMessageRoleUser,
-				Content: prompt,
-			},
-		},
-		ResponseFormat: &openai.ChatCompletionResponseFormat{
-			Type: openai.ChatCompletionResponseFormatTypeJSONObject,
-		},
+	// Call Gemini API
+	model := s.config.Model
+	if model == "" || strings.HasPrefix(model, "gpt-") {
+		model = "gemini-2.0-flash-exp"
 	}
-
-	resp, err := s.client.CreateChatCompletion(context.Background(), req)
+	
+	systemPrompt := "You are a productivity analyst providing comparative insights on user performance rankings. Always return valid JSON."
+	responseJSON, err := callGeminiAPI(apiKey, model, systemPrompt, prompt, s.config.Temperature, 2000)
 	if err != nil {
-		return fmt.Errorf("failed to call OpenAI API: %w", err)
+		return fmt.Errorf("Gemini API error: %w", err)
 	}
 
-	if len(resp.Choices) == 0 {
-		return fmt.Errorf("no response from OpenAI")
+	// Clean up the JSON - remove markdown code fences if present
+	responseJSON = strings.TrimSpace(responseJSON)
+	if strings.HasPrefix(responseJSON, "```json") {
+		responseJSON = strings.TrimPrefix(responseJSON, "```json")
+		responseJSON = strings.TrimSuffix(responseJSON, "```")
+		responseJSON = strings.TrimSpace(responseJSON)
+	} else if strings.HasPrefix(responseJSON, "```") {
+		responseJSON = strings.TrimPrefix(responseJSON, "```")
+		responseJSON = strings.TrimSuffix(responseJSON, "```")
+		responseJSON = strings.TrimSpace(responseJSON)
 	}
 
 	// Parse JSON response
@@ -1787,7 +1760,7 @@ IMPORTANT:
 		} `json:"rankings"`
 	}
 
-	if err := json.Unmarshal([]byte(resp.Choices[0].Message.Content), &aiResponse); err != nil {
+	if err := json.Unmarshal([]byte(responseJSON), &aiResponse); err != nil {
 		return fmt.Errorf("failed to parse AI response: %w", err)
 	}
 

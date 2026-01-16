@@ -308,7 +308,7 @@ if [ -z "$BACKEND_URL" ]; then
 fi
 
 # Run Python agent in background
-python server.py > /tmp/sj-chat-agent.log 2>&1 &
+python3 server.py > /tmp/sj-chat-agent.log 2>&1 &
 CHAT_AGENT_PID=$!
 cd ..
 echo -e "${GREEN}✅ Python chat agent started (PID: $CHAT_AGENT_PID)${NC}"

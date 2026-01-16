@@ -47,6 +47,24 @@ func (h *Handlers) GenerateReportHandler(c *gin.Context) {
 		return
 	}
 
+	// Validate that accountId, orgId are provided (allow 0 for local version)
+	// Note: Gin's binding:"required" treats 0 as empty for integers, so we validate manually
+	if req.AccountID < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "accountId must be a non-negative number"})
+		return
+	}
+	if req.OrgID < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "orgId must be a non-negative number"})
+		return
+	}
+	// Validate users have valid IDs (allow 0 for local version)
+	for i, user := range req.Users {
+		if user.ID < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("users[%d].id must be a non-negative number", i)})
+			return
+		}
+	}
+
 	// Check MongoDB cache - if report is cached, create a task with it immediately
 	cachedReport, err := h.reportService.GetCachedReport(req)
 	if err == nil && cachedReport != nil {
@@ -152,6 +170,24 @@ func (h *Handlers) GenerateWeeklyReportHandler(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Validate that accountId, orgId are provided (allow 0 for local version)
+	// Note: Gin's binding:"required" treats 0 as empty for integers, so we validate manually
+	if req.AccountID < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "accountId must be a non-negative number"})
+		return
+	}
+	if req.OrgID < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "orgId must be a non-negative number"})
+		return
+	}
+	// Validate users have valid IDs (allow 0 for local version)
+	for i, user := range req.Users {
+		if user.ID < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("users[%d].id must be a non-negative number", i)})
+			return
+		}
 	}
 
 	// Calculate week range for cache key

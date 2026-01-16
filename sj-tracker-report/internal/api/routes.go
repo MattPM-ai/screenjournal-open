@@ -1,8 +1,6 @@
 package api
 
 import (
-	"sj-tracker-report/internal/middleware"
-
 	"github.com/gin-gonic/gin"
 )
 
@@ -23,9 +21,8 @@ func SetupRoutes(handlers *Handlers) *gin.Engine {
 			chat.POST("/tools/execute", handlers.ExecuteToolHandler)
 		}
 
-		// Apply authentication middleware to all report routes
+		// Report routes (no auth required for open-source local version)
 		reports := api.Group("/reports")
-		reports.Use(middleware.AuthenticateUser())
 		{
 			reports.POST("/generate", handlers.GenerateReportHandler)
 			reports.POST("/generate-sync", handlers.GenerateReportSyncHandler)

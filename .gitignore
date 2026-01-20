@@ -58,6 +58,7 @@ local/
 dist/
 dist-bundled/
 dist-bundled-windows/
+dist-bundled-linux/
 build/
 out/
 *.build/

@@ -47,7 +47,13 @@
       "resources/python": "python",
       "resources/databases": "databases",
       "resources/frontend": "frontend",
-      "resources/start-bundled.sh": "start-bundled.sh"
+      "resources/start-bundled.sh": "start-bundled.sh",
+      "resources/start-bundled.bat": "start-bundled.bat"
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
     },
     "macOS": {
       "minimumSystemVersion": "10.13",

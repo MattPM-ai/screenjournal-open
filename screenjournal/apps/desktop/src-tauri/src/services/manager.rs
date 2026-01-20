@@ -687,8 +687,14 @@ pub async fn start_all_services(app_handle: AppHandle) -> Result<(), String> {
     let resource_dir = get_resource_dir(&app_handle)?;
     let app_data_dir = get_app_data_dir(&app_handle)?;
     
-    // Path to the startup script
-    let script_path = resource_dir.join("start-bundled.sh");
+    // Determine script path based on platform
+    let (script_path, shell_cmd) = if cfg!(target_os = "windows") {
+        let script = resource_dir.join("start-bundled.bat");
+        (script, "cmd.exe")
+    } else {
+        let script = resource_dir.join("start-bundled.sh");
+        (script, "bash")
+    };
     
     if !script_path.exists() {
         return Err(format!("Startup script not found at: {:?}", script_path));
@@ -697,8 +703,12 @@ pub async fn start_all_services(app_handle: AppHandle) -> Result<(), String> {
     log::info!("Executing startup script: {:?}", script_path);
     
     // Execute the script with environment variables
-    let mut cmd = TokioCommand::new("bash");
-    cmd.arg(&script_path);
+    let mut cmd = TokioCommand::new(shell_cmd);
+    if cfg!(target_os = "windows") {
+        cmd.arg("/c").arg(&script_path);
+    } else {
+        cmd.arg(&script_path);
+    }
     cmd.env("RESOURCE_DIR", &resource_dir);
     cmd.env("APP_DATA_DIR", &app_data_dir);
     cmd.current_dir(&app_data_dir);

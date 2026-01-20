@@ -57,6 +57,7 @@ local/
 # Build Artifacts (root level)
 dist/
 dist-bundled/
+dist-bundled-windows/
 build/
 out/
 *.build/

@@ -109,8 +109,10 @@ function main() {
   // Bundle additional resources (binaries, python, databases, frontend, scripts)
   const additionalResources = ['binaries', 'python', 'databases', 'frontend'];
   
-  // Bundle individual script files
-  const scriptFiles = ['start-bundled.sh'];
+  // Bundle individual script files (platform-specific)
+  const scriptFiles = process.platform === 'win32' 
+    ? ['start-bundled.bat']
+    : ['start-bundled.sh'];
   
   for (const resourceDir of additionalResources) {
     console.log(`📦 Bundling ${resourceDir}...`);

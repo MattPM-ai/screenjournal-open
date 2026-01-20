@@ -15,13 +15,17 @@
  * BUNDLED RESOURCES:
  *   - ActivityWatch: aw-server, aw-watcher-window, etc.
  *   - FFmpeg: Video encoding for screen recording
+ *   - Binaries: Go executables (sj-collector, sj-tracker-report)
+ *   - Python: Python virtual environment and chat agent source
+ *   - Databases: MongoDB and InfluxDB binaries
  * 
  */
 
 const fs = require('fs');
 const path = require('path');
 const { bundleResource, getAllResourceNames, getResource } = require('./lib/resource-manager');
-const { printHeader, printSection, isMacOS } = require('./lib/utils');
+const { printHeader, printSection, isMacOS, PATHS, copyDirRecursive, removeDir, fileExists } = require('./lib/utils');
+const { signDirectory } = require('./lib/signing');
 
 // =============================================================================
 // Bundle Path Detection
@@ -79,7 +83,7 @@ function main() {
   
   console.log(`🎯 Bundle target: ${bundlePath}\n`);
   
-  // Bundle each resource
+  // Bundle each resource from resource-manager (activitywatch, ffmpeg)
   const resourceNames = getAllResourceNames();
   const results = {};
   
@@ -102,14 +106,147 @@ function main() {
     }
   }
   
+  // Bundle additional resources (binaries, python, databases, frontend, scripts)
+  const additionalResources = ['binaries', 'python', 'databases', 'frontend'];
+  
+  // Bundle individual script files
+  const scriptFiles = ['start-bundled.sh'];
+  
+  for (const resourceDir of additionalResources) {
+    console.log(`📦 Bundling ${resourceDir}...`);
+    
+    const sourcePath = path.join(PATHS.resourcesDir, resourceDir);
+    const targetPath = path.join(bundlePath, resourceDir);
+    
+    // Check if source exists
+    if (!fileExists(sourcePath)) {
+      console.warn(`  ⚠️  ${resourceDir} not found at ${sourcePath}, skipping...\n`);
+      results[resourceDir] = { success: false, error: 'Source not found', skipped: true };
+      continue;
+    }
+    
+    // Remove existing
+    if (fileExists(targetPath)) {
+      removeDir(targetPath);
+    }
+    
+    // Copy
+    try {
+      copyDirRecursive(sourcePath, targetPath);
+      
+      // Make binaries and scripts executable (Unix only)
+      if (process.platform !== 'win32' && (resourceDir === 'binaries' || resourceDir === 'databases')) {
+        console.log(`  🔧 Making binaries executable...`);
+        const { makeExecutable, findFiles } = require('./lib/utils');
+        const binaries = findFiles(targetPath, /^(mongod|influxd|sj-collector|sj-tracker-report)$/);
+        binaries.forEach(b => {
+          try {
+            makeExecutable(b);
+          } catch (e) {
+            console.warn(`  ⚠️  Failed to make ${b} executable: ${e.message}`);
+          }
+        });
+      }
+      
+      // Make Python executables executable (Unix only)
+      if (process.platform !== 'win32' && resourceDir === 'python') {
+        console.log(`  🔧 Making Python executables executable...`);
+        const { makeExecutable, findFiles } = require('./lib/utils');
+        const pythonExes = findFiles(targetPath, /^sj-chat-agent$/);
+        pythonExes.forEach(exe => {
+          try {
+            makeExecutable(exe);
+            console.log(`  🔧 Made executable: ${path.basename(exe)}`);
+          } catch (e) {
+            console.warn(`  ⚠️  Failed to make ${exe} executable: ${e.message}`);
+          }
+        });
+      }
+      
+      // Make shell scripts executable (Unix only)
+      if (process.platform !== 'win32') {
+        const { makeExecutable, findFiles } = require('./lib/utils');
+        const scripts = findFiles(targetPath, /\.sh$/);
+        scripts.forEach(script => {
+          try {
+            makeExecutable(script);
+            console.log(`  🔧 Made script executable: ${path.basename(script)}`);
+          } catch (e) {
+            console.warn(`  ⚠️  Failed to make ${script} executable: ${e.message}`);
+          }
+        });
+      }
+      
+      // Sign on macOS
+      if (isMacOS()) {
+        console.log(`  🔏 Signing ${resourceDir} binaries...`);
+        const signResults = signDirectory(targetPath, PATHS.entitlements, { verbose: false });
+        if (signResults.success > 0) {
+          console.log(`  ✓ Signed ${signResults.success} binaries`);
+        }
+        if (signResults.failed > 0) {
+          console.warn(`  ⚠️  ${signResults.failed} binaries failed to sign`);
+        }
+      }
+      
+      results[resourceDir] = { success: true };
+      console.log(`  ✅ ${resourceDir} bundled successfully!\n`);
+    } catch (error) {
+      const errorMsg = `Copy failed: ${error.message}`;
+      console.error(`  ❌ Failed: ${errorMsg}\n`);
+      results[resourceDir] = { success: false, error: errorMsg };
+    }
+  }
+  
+  // Bundle individual script files
+  for (const scriptFile of scriptFiles) {
+    console.log(`📦 Bundling ${scriptFile}...`);
+    
+    const sourcePath = path.join(PATHS.resourcesDir, scriptFile);
+    const targetPath = path.join(bundlePath, scriptFile);
+    
+    if (!fileExists(sourcePath)) {
+      console.warn(`  ⚠️  ${scriptFile} not found at ${sourcePath}, skipping...\n`);
+      results[scriptFile] = { success: false, error: 'Source not found', skipped: true };
+      continue;
+    }
+    
+    try {
+      const { copyFile, makeExecutable } = require('./lib/utils');
+      copyFile(sourcePath, targetPath);
+      
+      // Make script executable (Unix only)
+      if (process.platform !== 'win32') {
+        makeExecutable(targetPath);
+        console.log(`  🔧 Made script executable`);
+      }
+      
+      // Sign on macOS
+      if (isMacOS()) {
+        console.log(`  🔏 Signing ${scriptFile}...`);
+        const signResults = signDirectory(path.dirname(targetPath), PATHS.entitlements, { verbose: false });
+        if (signResults.success > 0) {
+          console.log(`  ✓ Signed ${signResults.success} files`);
+        }
+      }
+      
+      results[scriptFile] = { success: true };
+      console.log(`  ✅ ${scriptFile} bundled successfully!\n`);
+    } catch (error) {
+      const errorMsg = `Copy failed: ${error.message}`;
+      console.error(`  ❌ Failed: ${errorMsg}\n`);
+      results[scriptFile] = { success: false, error: errorMsg };
+    }
+  }
+  
   // Summary
   printSection('Bundle Summary');
   
   let hasFailures = false;
   for (const [name, result] of Object.entries(results)) {
-    const status = result.success ? '✅' : '❌';
-    console.log(`  ${status} ${name}`);
-    if (!result.success) hasFailures = true;
+    const status = result.success ? '✅' : (result.skipped ? '⚠️' : '❌');
+    console.log(`  ${status} ${name}${result.skipped ? ' (skipped)' : ''}`);
+    if (!result.success && !result.skipped) hasFailures = true;
   }
   
   console.log('═'.repeat(60));

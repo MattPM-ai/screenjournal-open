@@ -10,6 +10,8 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const { signDirectory } = require('./lib/signing');
+const { isMacOS } = require('./lib/utils');
 
 // Parse command line arguments
 const args = process.argv.slice(2);
@@ -81,9 +83,33 @@ function signAppBundle() {
 
   console.log(`🔑 Using entitlements: ${entitlementsPath}\n`);
 
-  // Sign the app bundle
+  // Sign additional resource directories explicitly BEFORE deep signing
+  // This ensures all binaries in binaries/, python/, and databases/ are properly signed
+  // before the deep sign operation
+  const resourcesPath = path.join(appBundlePath, 'Contents', 'Resources');
+  const additionalResources = ['binaries', 'python', 'databases'];
+  
+  console.log('🔏 Signing additional resource directories...');
+  for (const resourceDir of additionalResources) {
+    const resourcePath = path.join(resourcesPath, resourceDir);
+    if (fs.existsSync(resourcePath)) {
+      console.log(`  📦 Signing ${resourceDir}...`);
+      const signResults = signDirectory(resourcePath, entitlementsPath, { verbose: true });
+      if (signResults.success > 0) {
+        console.log(`  ✓ Signed ${signResults.success} binaries in ${resourceDir}`);
+      }
+      if (signResults.failed > 0) {
+        console.warn(`  ⚠️  ${signResults.failed} binaries failed to sign in ${resourceDir}`);
+      }
+    } else {
+      console.log(`  ⊘ ${resourceDir} not found, skipping...`);
+    }
+  }
+  console.log('');
+
+  // Sign the app bundle with --deep (this will recursively sign everything)
   try {
-    console.log('🔏 Signing app bundle...');
+    console.log('🔏 Signing app bundle (deep)...');
     execSync(
       `codesign --force --deep --sign - --entitlements "${entitlementsPath}" "${appBundlePath}"`,
       { stdio: 'inherit' }

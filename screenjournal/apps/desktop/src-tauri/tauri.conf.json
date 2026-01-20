@@ -42,7 +42,12 @@
     ],
     "resources": {
       "resources/activitywatch": "activitywatch",
-      "resources/ffmpeg": "ffmpeg"
+      "resources/ffmpeg": "ffmpeg",
+      "resources/binaries": "binaries",
+      "resources/python": "python",
+      "resources/databases": "databases",
+      "resources/frontend": "frontend",
+      "resources/start-bundled.sh": "start-bundled.sh"
     },
     "macOS": {
       "minimumSystemVersion": "10.13",

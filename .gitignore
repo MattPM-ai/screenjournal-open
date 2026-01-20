@@ -56,6 +56,7 @@ local/
 
 # Build Artifacts (root level)
 dist/
+dist-bundled/
 build/
 out/
 *.build/
@@ -98,6 +99,7 @@ data/
 
 # Python Virtual Environments
 venv/
+venv-build/
 env/
 ENV/
 .venv/

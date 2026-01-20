@@ -43,6 +43,7 @@ import {
   stopRecording,
   getRecordingConfig,
 } from "@/lib/recordingClient";
+import { ServiceStartupScreen } from "./components/ServiceStartupScreen";
 
 // Dashboard settings type
 type DashboardSettings = {
@@ -66,6 +67,10 @@ type ServerStatus =
   | "initializing";
 
 export default function Home() {
+  // Service startup state
+  const [servicesReady, setServicesReady] = useState<boolean>(false);
+  const [serviceStartupError, setServiceStartupError] = useState<string | null>(null);
+
   // Server state
   const [status, setStatus] = useState<ServerStatus>("unknown");
   const [baseUrl, setBaseUrl] = useState<string>("");
@@ -568,6 +573,22 @@ export default function Home() {
       });
     }
   };
+
+  // Show service startup screen if services aren't ready yet
+  if (!servicesReady) {
+    return (
+      <ServiceStartupScreen
+        onReady={() => {
+          setServicesReady(true);
+        }}
+        onError={(error) => {
+          setServiceStartupError(error);
+          // Still allow the app to continue even if some services fail
+          setServicesReady(true);
+        }}
+      />
+    );
+  }
 
   return (
     <main className="flex h-screen overflow-hidden">

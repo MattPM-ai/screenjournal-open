@@ -153,3 +153,6 @@ curl -X POST http://localhost:8085/api/chat/tools/execute \
 4. **Rate Limiting**: Add rate limiting to prevent abuse
 5. **Logging**: Add structured logging for debugging
 
+
+
+

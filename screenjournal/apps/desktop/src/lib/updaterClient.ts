@@ -14,8 +14,10 @@
 
 // Dynamically import Tauri plugins to avoid SSR issues
 // These will only be loaded in Tauri runtime, not during SSR
-let updaterModule: typeof import('@tauri-apps/plugin-updater') | null = null;
-let processModule: typeof import('@tauri-apps/plugin-process') | null = null;
+// Using 'any' type to avoid TypeScript errors during Next.js build
+// since these modules are only available in Tauri runtime
+let updaterModule: any = null;
+let processModule: any = null;
 
 // Check if we're in Tauri runtime (not SSR or Next.js dev server)
 function isTauriRuntime(): boolean {
@@ -34,14 +36,18 @@ async function loadPlugins() {
   
   try {
     if (!updaterModule) {
+      // Dynamic import - modules only available in Tauri runtime
+      // Type declarations in types/tauri-plugins.d.ts provide build-time types
       updaterModule = await import('@tauri-apps/plugin-updater');
     }
     if (!processModule) {
+      // Dynamic import - modules only available in Tauri runtime
+      // Type declarations in types/tauri-plugins.d.ts provide build-time types
       processModule = await import('@tauri-apps/plugin-process');
     }
     return true;
   } catch (error) {
-    // Plugins not available
+    // Plugins not available (e.g., during Next.js build or dev server)
     return false;
   }
 }
@@ -136,7 +142,7 @@ export async function downloadAndInstall(
   let totalSize = 0;
   
   // Download with progress callback
-  await update.downloadAndInstall((event) => {
+  await update.downloadAndInstall((event: any) => {
     if (event.event === 'Started') {
       totalSize = event.data.contentLength ?? 0;
       console.log(`[UPDATER] Download started: ${totalSize || 'unknown'} bytes`);

@@ -29,7 +29,7 @@ use std::sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex};
 use std::time::Duration;
 use tauri::AppHandle;
 use tokio::task::JoinHandle;
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, Utc};
 
 // Global background task handle
 static BACKGROUND_HANDLE: Lazy<Mutex<Option<JoinHandle<()>>>> = 

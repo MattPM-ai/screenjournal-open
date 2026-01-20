@@ -3,6 +3,7 @@ use tauri::Manager;
 pub mod activitywatch;
 pub mod recording;
 pub mod collector;
+pub mod services;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -49,19 +50,28 @@ pub fn run() {
             crate::collector::manager::test_collector_connection,
             crate::collector::manager::update_collector_app_jwt_token,
             crate::collector::manager::trigger_daily_collection,
+            // Backend services management
+            crate::services::manager::get_all_services_status,
         ])
         .setup(|app| {
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Warn)
-                        // Set specific levels for modules
-                        .level_for("app_lib::collector", log::LevelFilter::Warn)
-                        .level_for("app_lib::activitywatch", log::LevelFilter::Warn)
-                        .level_for("app_lib::recording", log::LevelFilter::Warn)
-                        .build(),
-                )?;
-            }
+            // Enable logging in both debug and release modes
+            // In release mode, use Info level for services to help diagnose startup issues
+            let log_level = if cfg!(debug_assertions) {
+                log::LevelFilter::Warn
+            } else {
+                log::LevelFilter::Info
+            };
+            
+            app.handle().plugin(
+                tauri_plugin_log::Builder::default()
+                    .level(log_level)
+                    // Set specific levels for modules
+                    .level_for("app_lib::services", log::LevelFilter::Info) // Always show service logs
+                    .level_for("app_lib::collector", log::LevelFilter::Warn)
+                    .level_for("app_lib::activitywatch", log::LevelFilter::Warn)
+                    .level_for("app_lib::recording", log::LevelFilter::Warn)
+                    .build(),
+            )?;
             
             // Initialize recording system
             // 1. Initialize FFmpeg path (must be done before any recording operations)
@@ -76,6 +86,17 @@ pub fn run() {
             let gemini_config = crate::recording::config::load_gemini_config(&app.handle())
                 .unwrap_or_default();
             crate::recording::gemini::init_queue(&app.handle(), gemini_config);
+            
+            // Start all backend services on app launch
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                log::info!("Starting bundled backend services...");
+                if let Err(e) = crate::services::manager::start_all_services(app_handle.clone()).await {
+                    log::error!("Failed to start backend services: {}", e);
+                } else {
+                    log::info!("All backend services started successfully");
+                }
+            });
             
             // Load collector config and auto-start if enabled
             let app_handle = app.handle().clone();
@@ -150,6 +171,16 @@ pub fn run() {
                 tauri::async_runtime::block_on(async {
                     crate::recording::gemini::shutdown_queue().await;
                     log::info!("✓ Gemini queue stopped gracefully");
+                });
+                
+                // Stop all backend services
+                let app_handle = window.app_handle().clone();
+                tauri::async_runtime::block_on(async {
+                    if let Err(e) = crate::services::manager::stop_all_services(app_handle).await {
+                        log::error!("Failed to stop backend services: {}", e);
+                    } else {
+                        log::info!("✓ Backend services stopped gracefully");
+                    }
                 });
                 
                 log::info!("Graceful shutdown complete");

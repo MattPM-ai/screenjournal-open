@@ -272,6 +272,17 @@ echo ""
 
 # Build desktop app with Tauri for Linux
 echo -e "${BLUE}🖥️  Building bundled desktop app for Linux...${NC}"
+
+# Build UI package first (needed by desktop app)
+echo -e "${YELLOW}📦 Building UI package...${NC}"
+cd screenjournal
+npm run build --workspace=@repo/ui
+if [ $? -ne 0 ]; then
+    echo -e "${RED}❌ Failed to build UI package${NC}"
+    exit 1
+fi
+cd ..
+
 cd screenjournal/apps/desktop
 
 # Remove frontend from resources if it exists (to avoid Next.js trying to compile it)

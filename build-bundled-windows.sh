@@ -104,7 +104,23 @@ echo -e "${YELLOW}📦 Creating build virtual environment...${NC}"
 python3 -m venv venv-build
 
 echo -e "${YELLOW}📦 Installing dependencies including PyInstaller...${NC}"
-source venv-build/bin/activate
+# Detect activation script path (Windows uses Scripts, Unix uses bin)
+if [ -f "venv-build/Scripts/activate" ]; then
+    source venv-build/Scripts/activate
+elif [ -f "venv-build/bin/activate" ]; then
+    # Detect activation script path (Windows uses Scripts, Unix uses bin)
+if [ -f "venv-build/Scripts/activate" ]; then
+    source venv-build/Scripts/activate
+elif [ -f "venv-build/bin/activate" ]; then
+    source venv-build/bin/activate
+else
+    echo -e "${RED}❌ Could not find virtual environment activation script${NC}"
+    exit 1
+fi
+else
+    echo -e "${RED}❌ Could not find virtual environment activation script${NC}"
+    exit 1
+fi
 python3 -m pip install --upgrade pip
 python3 -m pip install -r requirements.txt
 python3 -m pip install pyinstaller
@@ -173,7 +189,15 @@ EOF
 
 # Build standalone executable with PyInstaller
 echo -e "${YELLOW}📦 Building standalone executable with PyInstaller...${NC}"
-source venv-build/bin/activate
+# Detect activation script path (Windows uses Scripts, Unix uses bin)
+if [ -f "venv-build/Scripts/activate" ]; then
+    source venv-build/Scripts/activate
+elif [ -f "venv-build/bin/activate" ]; then
+    source venv-build/bin/activate
+else
+    echo -e "${RED}❌ Could not find virtual environment activation script${NC}"
+    exit 1
+fi
 
 # On Windows, PyInstaller will create .exe, on other platforms it might not work correctly
 if [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "win32" ]]; then
@@ -286,6 +310,17 @@ echo ""
 
 # Build desktop app with Tauri for Windows
 echo -e "${BLUE}🖥️  Building bundled desktop app for Windows...${NC}"
+
+# Build UI package first (needed by desktop app)
+echo -e "${YELLOW}📦 Building UI package...${NC}"
+cd screenjournal
+npm run build --workspace=@repo/ui
+if [ $? -ne 0 ]; then
+    echo -e "${RED}❌ Failed to build UI package${NC}"
+    exit 1
+fi
+cd ..
+
 cd screenjournal/apps/desktop
 
 # Initialize variables for build outputs

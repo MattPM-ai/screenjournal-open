@@ -173,6 +173,13 @@ jobs:
         working-directory: sj-tracker-frontend
 
       # =========================================================================
+      # Build monorepo packages (UI package needed by desktop app)
+      # =========================================================================
+      - name: Build UI package
+        run: npm run build --workspace=@repo/ui
+        working-directory: screenjournal
+
+      # =========================================================================
       # Make build script executable and run it
       # =========================================================================
       - name: Make build script executable

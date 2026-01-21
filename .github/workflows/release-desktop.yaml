@@ -142,8 +142,12 @@ jobs:
             patchelf \
             libssl-dev \
             libpipewire-0.3-dev \
+            libspa-0.2-dev \
             ffmpeg \
             dpkg-dev
+          # Install older compatible PipeWire version for libspa 0.8.0
+          # The libspa crate 0.8.0 is compatible with PipeWire 0.3.x but needs older SPA headers
+          # Try to install libspa-0.2-dev which should be compatible
 
       - name: Install macOS dependencies
         if: matrix.platform == 'macos-latest'

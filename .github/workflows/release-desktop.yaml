@@ -111,6 +111,9 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.21'
+          cache-dependency-path: |
+            sj-collector/go.sum
+            sj-tracker-report/go.sum
 
       - name: Setup Python
         uses: actions/setup-python@v5

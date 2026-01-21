@@ -318,45 +318,61 @@ jobs:
           script: |
             const fs = require('fs');
             const path = require('path');
-            const { execSync } = require('child_process');
+            
+            // Recursive function to find files matching pattern
+            function findFiles(dir, pattern, fileList = []) {
+              if (!fs.existsSync(dir)) {
+                return fileList;
+              }
+              
+              const files = fs.readdirSync(dir);
+              
+              for (const file of files) {
+                const filePath = path.join(dir, file);
+                const stat = fs.statSync(filePath);
+                
+                if (stat.isDirectory()) {
+                  findFiles(filePath, pattern, fileList);
+                } else if (stat.isFile() && pattern.test(file)) {
+                  fileList.push(filePath);
+                }
+              }
+              
+              return fileList;
+            }
             
             // Try to find .exe installer first (in nsis directory)
             let installerPath = null;
             let installerName = null;
             let contentType = 'application/x-msdownload';
             
-            try {
-              // Use find command (available in Git Bash on Windows)
-              const exeFiles = execSync(`find screenjournal/apps/desktop/src-tauri/target -path "*/nsis/*.exe" -type f`, { 
-                encoding: 'utf-8'
-              }).trim().split('\n').filter(f => f);
-              
-              if (exeFiles.length > 0) {
-                installerPath = exeFiles[0].trim();
-                installerName = `ScreenJournal-Open-${process.env.ARTIFACT_NAME}-${process.env.VERSION}.exe`;
-              }
-            } catch (e) {
-              console.log('No .exe installer found, trying zip...');
-            }
+            const targetDir = path.join('screenjournal', 'apps', 'desktop', 'src-tauri', 'target');
             
-            // Fallback to zip if no .exe found
-            if (!installerPath) {
-              try {
-                const zipFiles = execSync(`find screenjournal/apps/desktop/src-tauri/target -name "*.zip" -type f`, {
-                  encoding: 'utf-8'
-                }).trim().split('\n').filter(f => f);
-                
-                if (zipFiles.length > 0) {
-                  installerPath = zipFiles[0].trim();
-                  installerName = `ScreenJournal-Open-${process.env.ARTIFACT_NAME}-${process.env.VERSION}.zip`;
-                  contentType = 'application/zip';
-                }
-              } catch (e) {
+            // Look for .exe files in nsis subdirectories
+            const exeFiles = findFiles(targetDir, /\.exe$/i).filter(p => 
+              p.toLowerCase().includes('nsis') || p.toLowerCase().includes('installer')
+            );
+            
+            if (exeFiles.length > 0) {
+              installerPath = exeFiles[0];
+              installerName = `ScreenJournal-Open-${process.env.ARTIFACT_NAME}-${process.env.VERSION}.exe`;
+            } else {
+              console.log('No .exe installer found, trying zip...');
+              
+              // Fallback to zip files
+              const zipFiles = findFiles(targetDir, /\.zip$/i);
+              
+              if (zipFiles.length > 0) {
+                installerPath = zipFiles[0];
+                installerName = `ScreenJournal-Open-${process.env.ARTIFACT_NAME}-${process.env.VERSION}.zip`;
+                contentType = 'application/zip';
+              } else {
                 throw new Error('No installer or zip file found');
               }
             }
             
-            console.log(`Uploading ${installerPath} as ${installerName}`);
+            console.log(`Found installer: ${installerPath}`);
+            console.log(`Uploading as ${installerName}`);
             
             const { data } = await github.rest.repos.uploadReleaseAsset({
               owner: context.repo.owner,

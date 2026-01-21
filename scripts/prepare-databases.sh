@@ -32,6 +32,10 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
     PLATFORM="linux"
     ARCH="x86_64"
+elif [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]] || [[ "$OSTYPE" == "win32" ]] || [[ -n "$WINDIR" ]]; then
+    # Windows (detected via Git Bash, Cygwin, or WINDIR environment variable)
+    PLATFORM="windows"
+    ARCH="x86_64"
 else
     echo -e "${RED}❌ Unsupported platform: $OSTYPE${NC}"
     exit 1
@@ -69,6 +73,9 @@ if [[ "$PLATFORM" == "darwin" ]]; then
 elif [[ "$PLATFORM" == "linux" ]]; then
     MONGO_URL="$MONGO_BASE_URL/linux/mongodb-linux-x86_64-ubuntu2204-$MONGO_VERSION.tgz"
     MONGO_ARCHIVE="mongodb-linux-x86_64-ubuntu2204-$MONGO_VERSION.tgz"
+elif [[ "$PLATFORM" == "windows" ]]; then
+    MONGO_URL="$MONGO_BASE_URL/windows/mongodb-windows-x86_64-$MONGO_VERSION.zip"
+    MONGO_ARCHIVE="mongodb-windows-x86_64-$MONGO_VERSION.zip"
 fi
 
 cd "$MONGO_TEMP_DIR"
@@ -92,22 +99,35 @@ if [ "$FILE_SIZE" -lt 10485760 ]; then
 fi
 
 echo -e "${YELLOW}Extracting MongoDB (file size: $FILE_SIZE bytes)...${NC}"
-tar -xzf "$MONGO_ARCHIVE"
-if [ $? -ne 0 ]; then
-    echo -e "${RED}❌ Failed to extract MongoDB archive${NC}"
-    echo -e "${YELLOW}File type: $(file "$MONGO_ARCHIVE")${NC}"
-    exit 1
+if [[ "$PLATFORM" == "windows" ]]; then
+    # Windows uses zip files
+    unzip -q "$MONGO_ARCHIVE"
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}❌ Failed to extract MongoDB archive${NC}"
+        exit 1
+    fi
+    MONGO_EXTRACTED_DIR=$(find . -maxdepth 1 -type d -name "mongodb-*" | head -1)
+    if [ -z "$MONGO_EXTRACTED_DIR" ]; then
+        echo -e "${RED}❌ Failed to find extracted MongoDB directory${NC}"
+        exit 1
+    fi
+    cp "$MONGO_EXTRACTED_DIR/bin/mongod.exe" "$RESOURCES_DIR/mongodb/$PLATFORM/$ARCH/mongod.exe"
+else
+    # Unix uses tar.gz
+    tar -xzf "$MONGO_ARCHIVE"
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}❌ Failed to extract MongoDB archive${NC}"
+        echo -e "${YELLOW}File type: $(file "$MONGO_ARCHIVE")${NC}"
+        exit 1
+    fi
+    MONGO_EXTRACTED_DIR=$(find . -maxdepth 1 -type d -name "mongodb-*" | head -1)
+    if [ -z "$MONGO_EXTRACTED_DIR" ]; then
+        echo -e "${RED}❌ Failed to find extracted MongoDB directory${NC}"
+        exit 1
+    fi
+    cp "$MONGO_EXTRACTED_DIR/bin/mongod" "$RESOURCES_DIR/mongodb/$PLATFORM/$ARCH/"
+    chmod +x "$RESOURCES_DIR/mongodb/$PLATFORM/$ARCH/mongod"
 fi
-
-# Copy mongod binary
-MONGO_EXTRACTED_DIR=$(find . -maxdepth 1 -type d -name "mongodb-*" | head -1)
-if [ -z "$MONGO_EXTRACTED_DIR" ]; then
-    echo -e "${RED}❌ Failed to find extracted MongoDB directory${NC}"
-    exit 1
-fi
-
-cp "$MONGO_EXTRACTED_DIR/bin/mongod" "$RESOURCES_DIR/mongodb/$PLATFORM/$ARCH/"
-chmod +x "$RESOURCES_DIR/mongodb/$PLATFORM/$ARCH/mongod"
 
 echo -e "${GREEN}✅ MongoDB binary prepared${NC}"
 echo ""
@@ -140,6 +160,11 @@ elif [[ "$PLATFORM" == "linux" ]]; then
     INFLUX_URL="https://dl.influxdata.com/influxdb/releases/influxdb2-${INFLUX_VERSION}-linux-amd64.tar.gz"
     INFLUX_ARCHIVE="influxdb2-${INFLUX_VERSION}-linux-amd64.tar.gz"
     INFLUX_ALT_URL="https://github.com/influxdata/influxdb/releases/download/v${INFLUX_VERSION}/influxdb2-${INFLUX_VERSION}-linux-amd64.tar.gz"
+    INFLUX_ALT_URL2=""
+elif [[ "$PLATFORM" == "windows" ]]; then
+    INFLUX_URL="https://dl.influxdata.com/influxdb/releases/influxdb2-${INFLUX_VERSION}-windows-amd64.zip"
+    INFLUX_ARCHIVE="influxdb2-${INFLUX_VERSION}-windows-amd64.zip"
+    INFLUX_ALT_URL=""
     INFLUX_ALT_URL2=""
 fi
 
@@ -202,25 +227,41 @@ if [ "$FILE_SIZE" -lt 1048576 ]; then
 fi
 
 echo -e "${YELLOW}Extracting InfluxDB (file size: $FILE_SIZE bytes)...${NC}"
-tar -xzf "$INFLUX_ARCHIVE"
-if [ $? -ne 0 ]; then
-    echo -e "${RED}❌ Failed to extract InfluxDB archive${NC}"
-    echo -e "${YELLOW}File type: $(file "$INFLUX_ARCHIVE")${NC}"
-    exit 1
+if [[ "$PLATFORM" == "windows" ]]; then
+    # Windows uses zip files
+    unzip -q "$INFLUX_ARCHIVE"
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}❌ Failed to extract InfluxDB archive${NC}"
+        exit 1
+    fi
+    # Try both naming patterns: influxdb2-* (hyphens) and influxdb2_* (underscores)
+    INFLUX_EXTRACTED_DIR=$(find . -maxdepth 1 -type d \( -name "influxdb2-*" -o -name "influxdb2_*" \) | head -1)
+    if [ -z "$INFLUX_EXTRACTED_DIR" ]; then
+        echo -e "${RED}❌ Failed to find extracted InfluxDB directory${NC}"
+        echo -e "${YELLOW}Contents of extraction directory:${NC}"
+        ls -la
+        exit 1
+    fi
+    cp "$INFLUX_EXTRACTED_DIR/influxd.exe" "$RESOURCES_DIR/influxdb/$PLATFORM/$ARCH/influxd.exe"
+else
+    # Unix uses tar.gz
+    tar -xzf "$INFLUX_ARCHIVE"
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}❌ Failed to extract InfluxDB archive${NC}"
+        echo -e "${YELLOW}File type: $(file "$INFLUX_ARCHIVE")${NC}"
+        exit 1
+    fi
+    # Try both naming patterns: influxdb2-* (hyphens) and influxdb2_* (underscores)
+    INFLUX_EXTRACTED_DIR=$(find . -maxdepth 1 -type d \( -name "influxdb2-*" -o -name "influxdb2_*" \) | head -1)
+    if [ -z "$INFLUX_EXTRACTED_DIR" ]; then
+        echo -e "${RED}❌ Failed to find extracted InfluxDB directory${NC}"
+        echo -e "${YELLOW}Contents of extraction directory:${NC}"
+        ls -la
+        exit 1
+    fi
+    cp "$INFLUX_EXTRACTED_DIR/influxd" "$RESOURCES_DIR/influxdb/$PLATFORM/$ARCH/"
+    chmod +x "$RESOURCES_DIR/influxdb/$PLATFORM/$ARCH/influxd"
 fi
-
-# Copy influxd binary
-# Try both naming patterns: influxdb2-* (hyphens) and influxdb2_* (underscores)
-INFLUX_EXTRACTED_DIR=$(find . -maxdepth 1 -type d \( -name "influxdb2-*" -o -name "influxdb2_*" \) | head -1)
-if [ -z "$INFLUX_EXTRACTED_DIR" ]; then
-    echo -e "${RED}❌ Failed to find extracted InfluxDB directory${NC}"
-    echo -e "${YELLOW}Contents of extraction directory:${NC}"
-    ls -la
-    exit 1
-fi
-
-cp "$INFLUX_EXTRACTED_DIR/influxd" "$RESOURCES_DIR/influxdb/$PLATFORM/$ARCH/"
-chmod +x "$RESOURCES_DIR/influxdb/$PLATFORM/$ARCH/influxd"
 
 echo -e "${GREEN}✅ InfluxDB binary prepared${NC}"
 echo ""

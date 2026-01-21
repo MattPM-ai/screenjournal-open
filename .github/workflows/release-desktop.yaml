@@ -180,6 +180,17 @@ jobs:
         working-directory: screenjournal
 
       # =========================================================================
+      # Setup ActivityWatch and FFmpeg binaries (required for desktop app)
+      # =========================================================================
+      - name: Setup ActivityWatch
+        run: npm run setup-aw -- --all
+        working-directory: screenjournal/apps/desktop
+
+      - name: Setup FFmpeg
+        run: npm run setup-ffmpeg -- --all
+        working-directory: screenjournal/apps/desktop
+
+      # =========================================================================
       # Make build script executable and run it
       # =========================================================================
       - name: Make build script executable

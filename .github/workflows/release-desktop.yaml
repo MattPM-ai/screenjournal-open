@@ -183,11 +183,11 @@ jobs:
       # Setup ActivityWatch and FFmpeg binaries (required for desktop app)
       # =========================================================================
       - name: Setup ActivityWatch
-        run: npm run setup-aw -- --all
+        run: npm run setup-aw
         working-directory: screenjournal/apps/desktop
 
       - name: Setup FFmpeg
-        run: npm run setup-ffmpeg -- --all
+        run: npm run setup-ffmpeg
         working-directory: screenjournal/apps/desktop
 
       # =========================================================================

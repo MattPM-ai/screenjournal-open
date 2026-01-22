@@ -88,7 +88,7 @@ jobs:
             artifact_name: macOS-universal
             artifact_pattern: 'screenjournal/apps/desktop/src-tauri/target/release/bundle/dmg/*.dmg'
           # Linux
-          - platform: ubuntu-22.04
+          - platform: ubuntu-20.04
             build_script: './build-bundled-linux.sh'
             artifact_name: Linux-x64
             artifact_pattern: 'screenjournal/apps/desktop/src-tauri/target/release/bundle/deb/*.deb'
@@ -132,7 +132,7 @@ jobs:
       # Platform-specific dependencies
       # =========================================================================
       - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
+        if: matrix.platform == 'ubuntu-20.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -143,11 +143,13 @@ jobs:
             libssl-dev \
             ffmpeg \
             dpkg-dev
-          # Try to install PipeWire 0.2.x which should be compatible with libspa 0.8.0
-          # If that's not available, fall back to 0.3.x and we'll need to work around the API mismatch
-          sudo apt-get install -y libpipewire-0.2-dev libspa-0.2-dev 2>/dev/null || \
-            sudo apt-get install -y libpipewire-0.3-dev libspa-0.3-dev
-          # Set PKG_CONFIG_PATH to prefer older version if both are installed
+          # Try to install PipeWire 0.2.x first (compatible with libspa 0.8.0)
+          # Ubuntu 20.04 should have PipeWire 0.2.x available
+          # If that fails, fall back to 0.3.x
+          sudo apt-get install -y libpipewire-0.2-dev 2>/dev/null || \
+            sudo apt-get install -y libpipewire-0.3-dev || \
+            echo "Warning: Could not install PipeWire dev libraries"
+          # Set PKG_CONFIG_PATH for pkg-config to find PipeWire
           echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig" >> $GITHUB_ENV
 
       - name: Install macOS dependencies
@@ -273,7 +275,7 @@ jobs:
             console.log(`Uploaded: ${data.browser_download_url}`);
 
       - name: Find and upload Linux DEB
-        if: matrix.platform == 'ubuntu-22.04'
+        if: matrix.platform == 'ubuntu-20.04'
         uses: actions/github-script@v7
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

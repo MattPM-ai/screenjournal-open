@@ -10,7 +10,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
-const { signDirectory } = require('./lib/signing');
+const { signDirectory, getSigningIdentity } = require('./lib/signing');
 const { isMacOS } = require('./lib/utils');
 
 // Parse command line arguments
@@ -83,6 +83,16 @@ function signAppBundle() {
 
   console.log(`🔑 Using entitlements: ${entitlementsPath}\n`);
 
+  // Get signing identity (Developer ID or ad-hoc)
+  const signingIdentity = getSigningIdentity();
+  const identityFlag = signingIdentity === "-" ? "-" : `"${signingIdentity}"`;
+  
+  if (signingIdentity !== "-") {
+    console.log(`🔐 Using Developer ID certificate: ${signingIdentity}\n`);
+  } else {
+    console.log(`⚠️  Using ad-hoc signing (no Developer ID certificate found)\n`);
+  }
+
   // Sign additional resource directories explicitly BEFORE deep signing
   // This ensures all binaries in binaries/, python/, and databases/ are properly signed
   // before the deep sign operation
@@ -94,7 +104,10 @@ function signAppBundle() {
     const resourcePath = path.join(resourcesPath, resourceDir);
     if (fs.existsSync(resourcePath)) {
       console.log(`  📦 Signing ${resourceDir}...`);
-      const signResults = signDirectory(resourcePath, entitlementsPath, { verbose: true });
+      const signResults = signDirectory(resourcePath, entitlementsPath, { 
+        verbose: true,
+        signingIdentity: signingIdentity 
+      });
       if (signResults.success > 0) {
         console.log(`  ✓ Signed ${signResults.success} binaries in ${resourceDir}`);
       }
@@ -111,7 +124,7 @@ function signAppBundle() {
   try {
     console.log('🔏 Signing app bundle (deep)...');
     execSync(
-      `codesign --force --deep --sign - --entitlements "${entitlementsPath}" "${appBundlePath}"`,
+      `codesign --force --deep --sign ${identityFlag} --entitlements "${entitlementsPath}" "${appBundlePath}"`,
       { stdio: 'inherit' }
     );
     console.log('✅ App bundle signed successfully!\n');

@@ -4,7 +4,7 @@
  * ============================================================================
  * 
  * macOS code signing utilities for bundled binaries.
- * Uses ad-hoc signing with entitlements for development and testing.
+ * Uses Developer ID certificate when available, falls back to ad-hoc signing.
  */
 
 const fs = require('fs');
@@ -13,16 +13,42 @@ const { execSync } = require('child_process');
 const { isMacOS, fileExists } = require('./utils');
 
 // =============================================================================
+// Certificate Detection
+// =============================================================================
+
+/**
+ * Get the signing identity to use (Developer ID or ad-hoc)
+ * @returns {string} Signing identity name or "-" for ad-hoc
+ */
+function getSigningIdentity() {
+  // Check for Developer ID certificate
+  const developerIdCert = "Developer ID Application: Chomtana CHANJARASWICHAI (2N4Z8N5N6A)";
+  
+  try {
+    // Try to verify the certificate exists and is accessible
+    execSync(
+      `security find-certificate -c "${developerIdCert}" -p ~/Library/Keychains/login.keychain-db > /dev/null 2>&1`,
+      { stdio: 'pipe' }
+    );
+    return developerIdCert;
+  } catch (error) {
+    // Fall back to ad-hoc signing if certificate not found
+    return "-";
+  }
+}
+
+// =============================================================================
 // Signing Functions
 // =============================================================================
 
 /**
- * Sign a single binary with ad-hoc signature (macOS only)
+ * Sign a single binary (macOS only)
  * @param {string} binaryPath - Path to binary
  * @param {string} entitlementsPath - Path to entitlements.plist
+ * @param {string} signingIdentity - Optional signing identity (defaults to auto-detect)
  * @returns {{ success: boolean, error?: string }}
  */
-function signBinary(binaryPath, entitlementsPath) {
+function signBinary(binaryPath, entitlementsPath, signingIdentity = null) {
   // Only sign on macOS
   if (!isMacOS()) {
     return { success: true, skipped: true };
@@ -38,9 +64,13 @@ function signBinary(binaryPath, entitlementsPath) {
     return { success: false, error: `Entitlements not found: ${entitlementsPath}` };
   }
   
+  // Get signing identity if not provided
+  const identity = signingIdentity || getSigningIdentity();
+  const identityFlag = identity === "-" ? "-" : `"${identity}"`;
+  
   try {
     execSync(
-      `codesign --force --sign - --entitlements "${entitlementsPath}" --deep "${binaryPath}"`,
+      `codesign --force --sign ${identityFlag} --entitlements "${entitlementsPath}" --deep "${binaryPath}"`,
       { stdio: 'pipe' }
     );
     return { success: true };
@@ -58,7 +88,7 @@ function signBinary(binaryPath, entitlementsPath) {
  * @returns {{ success: number, failed: number, skipped: number }}
  */
 function signDirectory(dir, entitlementsPath, options = {}) {
-  const { verbose = false } = options;
+  const { verbose = false, signingIdentity = null } = options;
   const results = { success: 0, failed: 0, skipped: 0 };
   
   // Only sign on macOS
@@ -78,6 +108,12 @@ function signDirectory(dir, entitlementsPath, options = {}) {
     return results;
   }
   
+  // Get signing identity once for all binaries in this directory
+  const identity = signingIdentity || getSigningIdentity();
+  if (verbose && identity !== "-") {
+    console.log(`  🔑 Using signing identity: ${identity}`);
+  }
+  
   // Find all executable binaries recursively
   try {
     const findCommand = `find "${dir}" -type f -perm +111`;
@@ -88,7 +124,7 @@ function signDirectory(dir, entitlementsPath, options = {}) {
     });
     
     for (const binaryPath of binaries) {
-      const result = signBinary(binaryPath, entitlementsPath);
+      const result = signBinary(binaryPath, entitlementsPath, identity);
       
       if (result.skipped) {
         results.skipped++;
@@ -120,12 +156,18 @@ function signDirectory(dir, entitlementsPath, options = {}) {
  * @returns {{ success: number, failed: number, skipped: number }}
  */
 function signBinaries(binaryPaths, entitlementsPath, options = {}) {
-  const { verbose = false } = options;
+  const { verbose = false, signingIdentity = null } = options;
   const results = { success: 0, failed: 0, skipped: 0 };
   
   // Only sign on macOS
   if (!isMacOS()) {
     return results;
+  }
+  
+  // Get signing identity once for all binaries
+  const identity = signingIdentity || getSigningIdentity();
+  if (verbose && identity !== "-") {
+    console.log(`  🔑 Using signing identity: ${identity}`);
   }
   
   for (const binaryPath of binaryPaths) {
@@ -137,7 +179,7 @@ function signBinaries(binaryPaths, entitlementsPath, options = {}) {
       continue;
     }
     
-    const result = signBinary(binaryPath, entitlementsPath);
+    const result = signBinary(binaryPath, entitlementsPath, identity);
     
     if (result.success) {
       if (verbose) {
@@ -163,4 +205,5 @@ module.exports = {
   signBinary,
   signDirectory,
   signBinaries,
+  getSigningIdentity,
 };

@@ -4,13 +4,13 @@
 # This version bundles all services (databases, backends, frontend) into a standalone app.
 # Triggers on version tags (v*.*.*) or manual dispatch.
 #
-# Required secrets for Apple signing (add when ready):
-#   APPLE_CERTIFICATE - Base64-encoded .p12 certificate
-#   APPLE_CERTIFICATE_PASSWORD - Certificate password
-#   APPLE_SIGNING_IDENTITY - e.g., "Developer ID Application: Your Name (TEAM_ID)"
-#   APPLE_ID - Apple ID email for notarization
-#   APPLE_PASSWORD - App-specific password
-#   APPLE_TEAM_ID - 10-character team ID
+# Required secrets for Apple signing:
+#   APPLE_CERTIFICATE - Base64-encoded .p12 certificate (base64 -i certificate.p12)
+#   APPLE_CERTIFICATE_PASSWORD - Password for the .p12 file
+#   APPLE_SIGNING_IDENTITY - "Developer ID Application: Chomtana CHANJARASWICHAI (2N4Z8N5N6A)"
+#   APPLE_ID - Apple ID email for notarization (optional, for distribution)
+#   APPLE_PASSWORD - App-specific password for notarization (optional)
+#   APPLE_TEAM_ID - 10-character team ID: 2N4Z8N5N6A
 #
 # Required secrets for Windows signing (add when ready):
 #   WINDOWS_CERTIFICATE - Base64-encoded certificate
@@ -191,6 +191,37 @@ jobs:
         working-directory: screenjournal/apps/desktop
 
       # =========================================================================
+      # Import Apple Code Signing Certificate (macOS only)
+      # =========================================================================
+      - name: Import Apple Certificate
+        if: matrix.platform == 'macos-latest' && env.APPLE_CERTIFICATE != ''
+        run: |
+          echo "🔐 Importing Apple Developer ID certificate..."
+          # Create temporary keychain for certificate
+          KEYCHAIN_NAME="build.keychain"
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 12)
+          
+          # Create keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+          security set-keychain-settings -t 3600 -u "$KEYCHAIN_NAME"
+          security list-keychains -d user -s "$KEYCHAIN_NAME" $(security list-keychains -d user | sed 's/^[ ]*"\(.*\)".*$/\1/' | tr '\n' ' ')
+          
+          # Decode and import certificate
+          echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
+          security import certificate.p12 -k "$KEYCHAIN_NAME" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          
+          # Trust the certificate
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_NAME"
+          
+          # Verify certificate is accessible
+          security find-identity -v -p codesigning "$KEYCHAIN_NAME" || true
+          
+          echo "✅ Certificate imported successfully"
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
+      # =========================================================================
       # Make build script executable and run it
       # =========================================================================
       - name: Make build script executable
@@ -204,13 +235,19 @@ jobs:
         env:
           # Gemini API key - embedded at build time if needed
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          # Apple signing - uncomment when certificates are configured
-          # APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          # APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          # APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          # APPLE_ID: ${{ secrets.APPLE_ID }}
-          # APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Apple signing - configure these secrets in GitHub repository settings
+          # APPLE_CERTIFICATE: Base64-encoded .p12 certificate file
+          # APPLE_CERTIFICATE_PASSWORD: Password for the .p12 file
+          # APPLE_SIGNING_IDENTITY: "Developer ID Application: Chomtana CHANJARASWICHAI (2N4Z8N5N6A)"
+          # APPLE_ID: Apple ID email for notarization (optional)
+          # APPLE_PASSWORD: App-specific password for notarization (optional)
+          # APPLE_TEAM_ID: 10-character team ID (2N4Z8N5N6A)
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Run bundled build script (Windows)
         if: matrix.platform == 'windows-latest'

@@ -141,14 +141,13 @@ jobs:
             librsvg2-dev \
             patchelf \
             libssl-dev \
+            libpipewire-0.3-dev \
+            libspa-0.2-dev \
             ffmpeg \
             dpkg-dev
-          # Note: libspa 0.8.0 (via scap) has API mismatches with newer PipeWire headers
-          # We install PipeWire dev libraries but may need to work around compatibility issues
-          # The build may fail, in which case we'd need to update scap or use a different approach
-          sudo apt-get install -y \
-            libpipewire-0.3-dev \
-            libspa-0.2-dev || true
+          # Install older compatible PipeWire version for libspa 0.8.0
+          # The libspa crate 0.8.0 is compatible with PipeWire 0.3.x but needs older SPA headers
+          # Try to install libspa-0.2-dev which should be compatible
 
       - name: Install macOS dependencies
         if: matrix.platform == 'macos-latest'

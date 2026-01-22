@@ -65,7 +65,7 @@ jobs:
               repo: context.repo.repo,
               tag_name: `v${{ steps.version.outputs.version }}`,
               name: `ScreenJournal Open v${{ steps.version.outputs.version }}`,
-              body: `## ScreenJournal Open v${{ steps.version.outputs.version }}\n\nDownload the installer for your platform below.\n\n### Installation\n- **macOS**: Download the .dmg file and drag to Applications\n- **Windows**: Download and run the .exe installer or extract the .zip file\n- **Linux**: Download the .deb package and install with \`sudo dpkg -i\``,
+              body: `## ScreenJournal Open v${{ steps.version.outputs.version }}\n\nDownload the installer for your platform below.\n\n### Installation\n- **macOS**: Download the .dmg file and drag to Applications\n- **Windows**: Download and run the .exe installer or extract the .zip file\n\n**Note**: Linux builds are currently unavailable due to dependency compatibility issues.`,
               draft: true,
               prerelease: false
             })
@@ -87,11 +87,11 @@ jobs:
             build_script: './build-bundled.sh'
             artifact_name: macOS-universal
             artifact_pattern: 'screenjournal/apps/desktop/src-tauri/target/release/bundle/dmg/*.dmg'
-          # Linux
-          - platform: ubuntu-20.04
-            build_script: './build-bundled-linux.sh'
-            artifact_name: Linux-x64
-            artifact_pattern: 'screenjournal/apps/desktop/src-tauri/target/release/bundle/deb/*.deb'
+          # Linux - Currently skipped due to libspa/PipeWire compatibility issues
+          # - platform: ubuntu-22.04
+          #   build_script: './build-bundled-linux.sh'
+          #   artifact_name: Linux-x64
+          #   artifact_pattern: 'screenjournal/apps/desktop/src-tauri/target/release/bundle/deb/*.deb'
           # Windows
           - platform: windows-latest
             build_script: './build-bundled-windows.sh'
@@ -132,7 +132,7 @@ jobs:
       # Platform-specific dependencies
       # =========================================================================
       - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-20.04'
+        if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -141,16 +141,9 @@ jobs:
             librsvg2-dev \
             patchelf \
             libssl-dev \
+            libpipewire-0.3-dev \
             ffmpeg \
             dpkg-dev
-          # Try to install PipeWire 0.2.x first (compatible with libspa 0.8.0)
-          # Ubuntu 20.04 should have PipeWire 0.2.x available
-          # If that fails, fall back to 0.3.x
-          sudo apt-get install -y libpipewire-0.2-dev 2>/dev/null || \
-            sudo apt-get install -y libpipewire-0.3-dev || \
-            echo "Warning: Could not install PipeWire dev libraries"
-          # Set PKG_CONFIG_PATH for pkg-config to find PipeWire
-          echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig" >> $GITHUB_ENV
 
       - name: Install macOS dependencies
         if: matrix.platform == 'macos-latest'
@@ -274,44 +267,45 @@ jobs:
             
             console.log(`Uploaded: ${data.browser_download_url}`);
 
-      - name: Find and upload Linux DEB
-        if: matrix.platform == 'ubuntu-20.04'
-        uses: actions/github-script@v7
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
-          VERSION: ${{ needs.create-release.outputs.version }}
-          ARTIFACT_NAME: ${{ matrix.artifact_name }}
-        with:
-          script: |
-            const fs = require('fs');
-            const { execSync } = require('child_process');
-            
-            // Find DEB file
-            const debFiles = execSync(`find screenjournal/apps/desktop/src-tauri/target -name "*.deb" -type f`, { encoding: 'utf-8' }).trim().split('\n').filter(f => f);
-            
-            if (debFiles.length === 0) {
-              throw new Error('No DEB file found');
-            }
-            
-            const debPath = debFiles[0];
-            const debName = `ScreenJournal-Open-${process.env.ARTIFACT_NAME}-${process.env.VERSION}.deb`;
-            
-            console.log(`Uploading ${debPath} as ${debName}`);
-            
-            const { data } = await github.rest.repos.uploadReleaseAsset({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              release_id: parseInt(process.env.RELEASE_ID),
-              name: debName,
-              data: fs.readFileSync(debPath),
-              headers: {
-                'content-type': 'application/vnd.debian.binary-package',
-                'content-length': fs.statSync(debPath).size
-              }
-            });
-            
-            console.log(`Uploaded: ${data.browser_download_url}`);
+      # Linux DEB upload - Currently skipped due to libspa/PipeWire compatibility issues
+      # - name: Find and upload Linux DEB
+      #   if: matrix.platform == 'ubuntu-22.04'
+      #   uses: actions/github-script@v7
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #     RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+      #     VERSION: ${{ needs.create-release.outputs.version }}
+      #     ARTIFACT_NAME: ${{ matrix.artifact_name }}
+      #   with:
+      #     script: |
+      #       const fs = require('fs');
+      #       const { execSync } = require('child_process');
+      #       
+      #       // Find DEB file
+      #       const debFiles = execSync(`find screenjournal/apps/desktop/src-tauri/target -name "*.deb" -type f`, { encoding: 'utf-8' }).trim().split('\n').filter(f => f);
+      #       
+      #       if (debFiles.length === 0) {
+      #         throw new Error('No DEB file found');
+      #       }
+      #       
+      #       const debPath = debFiles[0];
+      #       const debName = `ScreenJournal-Open-${process.env.ARTIFACT_NAME}-${process.env.VERSION}.deb`;
+      #       
+      #       console.log(`Uploading ${debPath} as ${debName}`);
+      #       
+      #       const { data } = await github.rest.repos.uploadReleaseAsset({
+      #         owner: context.repo.owner,
+      #         repo: context.repo.repo,
+      #         release_id: parseInt(process.env.RELEASE_ID),
+      #         name: debName,
+      #         data: fs.readFileSync(debPath),
+      #         headers: {
+      #           'content-type': 'application/vnd.debian.binary-package',
+      #           'content-length': fs.statSync(debPath).size
+      #         }
+      #       });
+      #       
+      #       console.log(`Uploaded: ${data.browser_download_url}`);
 
       - name: Find and upload Windows installer
         if: matrix.platform == 'windows-latest'

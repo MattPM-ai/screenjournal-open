@@ -25,12 +25,19 @@ function getSigningIdentity() {
   const developerIdCert = "Developer ID Application: Chomtana CHANJARASWICHAI (2N4Z8N5N6A)";
   
   try {
-    // Try to verify the certificate exists and is accessible
-    execSync(
-      `security find-certificate -c "${developerIdCert}" -p ~/Library/Keychains/login.keychain-db > /dev/null 2>&1`,
-      { stdio: 'pipe' }
+    // Try to find the certificate in any accessible keychain
+    // This works for both local (login keychain) and CI (temporary keychain)
+    const result = execSync(
+      `security find-identity -v -p codesigning 2>/dev/null | grep "${developerIdCert}" || true`,
+      { encoding: 'utf8', stdio: 'pipe' }
     );
-    return developerIdCert;
+    
+    if (result.trim().includes(developerIdCert)) {
+      return developerIdCert;
+    }
+    
+    // Fall back to ad-hoc signing if certificate not found
+    return "-";
   } catch (error) {
     // Fall back to ad-hoc signing if certificate not found
     return "-";
@@ -68,11 +75,27 @@ function signBinary(binaryPath, entitlementsPath, signingIdentity = null) {
   const identity = signingIdentity || getSigningIdentity();
   const identityFlag = identity === "-" ? "-" : `"${identity}"`;
   
+  // For notarization, we need:
+  // - Hardened runtime (--options runtime)
+  // - Secure timestamp (--timestamp)
+  // - No --deep (deprecated, sign nested binaries separately)
+  const isDeveloperId = identity !== "-";
+  const runtimeOptions = isDeveloperId ? "--options runtime" : "";
+  const timestamp = isDeveloperId ? "--timestamp" : "";
+  
   try {
-    execSync(
-      `codesign --force --sign ${identityFlag} --entitlements "${entitlementsPath}" --deep "${binaryPath}"`,
-      { stdio: 'pipe' }
-    );
+    // Build codesign command with required flags for notarization
+    const codesignCmd = [
+      "codesign",
+      "--force",
+      "--sign", identityFlag,
+      "--entitlements", `"${entitlementsPath}"`,
+      runtimeOptions,
+      timestamp,
+      `"${binaryPath}"`
+    ].filter(Boolean).join(" ");
+    
+    execSync(codesignCmd, { stdio: 'pipe' });
     return { success: true };
   } catch (error) {
     return { success: false, error: error.message };

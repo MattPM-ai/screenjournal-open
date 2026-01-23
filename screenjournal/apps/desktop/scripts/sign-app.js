@@ -93,13 +93,13 @@ function signAppBundle() {
     console.log(`⚠️  Using ad-hoc signing (no Developer ID certificate found)\n`);
   }
 
-  // Sign additional resource directories explicitly BEFORE deep signing
-  // This ensures all binaries in binaries/, python/, and databases/ are properly signed
-  // before the deep sign operation
+  // Sign all resource directories explicitly BEFORE signing the app bundle
+  // This ensures all binaries are properly signed with hardened runtime and timestamps
+  // Required for notarization - all nested binaries must be signed individually
   const resourcesPath = path.join(appBundlePath, 'Contents', 'Resources');
-  const additionalResources = ['binaries', 'python', 'databases'];
+  const additionalResources = ['binaries', 'python', 'databases', 'activitywatch', 'ffmpeg'];
   
-  console.log('🔏 Signing additional resource directories...');
+  console.log('🔏 Signing all resource directories...');
   for (const resourceDir of additionalResources) {
     const resourcePath = path.join(resourcesPath, resourceDir);
     if (fs.existsSync(resourcePath)) {
@@ -120,13 +120,44 @@ function signAppBundle() {
   }
   console.log('');
 
-  // Sign the app bundle with --deep (this will recursively sign everything)
+  // Sign the main executable
+  const mainExecutable = path.join(appBundlePath, 'Contents', 'MacOS', path.basename(appBundlePath, '.app'));
+  if (fs.existsSync(mainExecutable)) {
+    console.log('🔏 Signing main executable...');
+    try {
+      const { signBinary } = require('./lib/signing');
+      const result = signBinary(mainExecutable, entitlementsPath, signingIdentity);
+      if (result.success) {
+        console.log('✅ Main executable signed successfully!\n');
+      } else {
+        console.error(`❌ Failed to sign main executable: ${result.error}`);
+        return 1;
+      }
+    } catch (error) {
+      console.error('❌ Failed to sign main executable:', error.message);
+      return 1;
+    }
+  }
+
+  // Sign the app bundle (without --deep, since we've signed everything explicitly)
+  // For notarization, we need hardened runtime and timestamps
   try {
-    console.log('🔏 Signing app bundle (deep)...');
-    execSync(
-      `codesign --force --deep --sign ${identityFlag} --entitlements "${entitlementsPath}" "${appBundlePath}"`,
-      { stdio: 'inherit' }
-    );
+    console.log('🔏 Signing app bundle...');
+    const isDeveloperId = signingIdentity !== "-";
+    const runtimeOptions = isDeveloperId ? "--options runtime" : "";
+    const timestamp = isDeveloperId ? "--timestamp" : "";
+    
+    const codesignCmd = [
+      "codesign",
+      "--force",
+      "--sign", identityFlag,
+      "--entitlements", `"${entitlementsPath}"`,
+      runtimeOptions,
+      timestamp,
+      `"${appBundlePath}"`
+    ].filter(Boolean).join(" ");
+    
+    execSync(codesignCmd, { stdio: 'inherit' });
     console.log('✅ App bundle signed successfully!\n');
   } catch (error) {
     console.error('❌ Failed to sign app bundle:', error.message);

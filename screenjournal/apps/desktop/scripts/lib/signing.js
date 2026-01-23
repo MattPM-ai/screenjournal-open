@@ -103,6 +103,71 @@ function signBinary(binaryPath, entitlementsPath, signingIdentity = null) {
 }
 
 /**
+ * Recursively find all files in a directory
+ */
+function findAllFiles(dir, fileList = []) {
+  if (!fs.existsSync(dir)) {
+    return fileList;
+  }
+  
+  const files = fs.readdirSync(dir);
+  for (const file of files) {
+    const filePath = path.join(dir, file);
+    try {
+      const stat = fs.statSync(filePath);
+      if (stat.isDirectory()) {
+        // Skip .git and other hidden/system directories
+        if (!file.startsWith('.')) {
+          findAllFiles(filePath, fileList);
+        }
+      } else if (stat.isFile()) {
+        fileList.push(filePath);
+      }
+    } catch (e) {
+      // Skip files we can't access
+    }
+  }
+  return fileList;
+}
+
+/**
+ * Check if a file is a Mach-O binary that needs signing
+ */
+function isBinaryFile(filePath) {
+  try {
+    // Check by extension first (fast)
+    const ext = path.extname(filePath);
+    const basename = path.basename(filePath);
+    if (ext === '.dylib' || ext === '.so' || basename === 'Python') {
+      return true;
+    }
+    
+    // Check if it has execute permissions
+    const stat = fs.statSync(filePath);
+    if (stat.mode & parseInt('111', 8)) {
+      // Has execute bit, check if it's actually a binary
+      try {
+        const fileOutput = execSync(`file -b "${filePath}"`, { encoding: 'utf8', stdio: 'pipe' });
+        return fileOutput.includes('Mach-O');
+      } catch (e) {
+        // If file command fails, assume it's a binary if it has execute bit
+        return true;
+      }
+    }
+    
+    // Check using file command for other potential binaries
+    try {
+      const fileOutput = execSync(`file -b "${filePath}"`, { encoding: 'utf8', stdio: 'pipe' });
+      return fileOutput.includes('Mach-O');
+    } catch (e) {
+      return false;
+    }
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
  * Sign all executables in a directory (macOS only)
  * @param {string} dir - Directory containing binaries
  * @param {string} entitlementsPath - Path to entitlements.plist
@@ -137,34 +202,55 @@ function signDirectory(dir, entitlementsPath, options = {}) {
     console.log(`  🔑 Using signing identity: ${identity}`);
   }
   
-  // Find all executable binaries recursively
   try {
-    const findCommand = `find "${dir}" -type f -perm +111`;
-    const output = execSync(findCommand, { encoding: 'utf8' });
-    const binaries = output.trim().split('\n').filter(f => {
-      // Filter out non-binary files
-      return f && !f.includes('.json') && !f.includes('.txt') && !f.includes('.md');
+    // Find all files recursively
+    const allFiles = findAllFiles(dir);
+    
+    // Filter to only binaries
+    const binaries = allFiles.filter(filePath => {
+      // Skip non-binary files by extension
+      const ext = path.extname(filePath);
+      const basename = path.basename(filePath);
+      if (['.json', '.txt', '.md', '.pyc', '.py', '.plist', '.html', '.css', '.js', '.ts'].includes(ext)) {
+        return false;
+      }
+      // Check if it's a binary
+      return isBinaryFile(filePath);
     });
     
+    // Sort to sign in consistent order
+    binaries.sort();
+    
+    if (verbose) {
+      console.log(`  📋 Found ${binaries.length} binaries to sign`);
+    }
+    
     for (const binaryPath of binaries) {
-      const result = signBinary(binaryPath, entitlementsPath, identity);
-      
-      if (result.skipped) {
-        results.skipped++;
-      } else if (result.success) {
-        if (verbose) {
-          console.log(`  ✓ Signed: ${path.basename(binaryPath)}`);
+      try {
+        const result = signBinary(binaryPath, entitlementsPath, identity);
+        
+        if (result.skipped) {
+          results.skipped++;
+        } else if (result.success) {
+          if (verbose) {
+            console.log(`  ✓ Signed: ${path.relative(dir, binaryPath)}`);
+          }
+          results.success++;
+        } else {
+          if (verbose) {
+            console.warn(`  ⚠ Failed: ${path.relative(dir, binaryPath)}: ${result.error}`);
+          }
+          results.failed++;
         }
-        results.success++;
-      } else {
+      } catch (err) {
         if (verbose) {
-          console.warn(`  ⚠ Failed: ${path.basename(binaryPath)}: ${result.error}`);
+          console.warn(`  ⚠ Error signing ${path.relative(dir, binaryPath)}: ${err.message}`);
         }
         results.failed++;
       }
     }
-  } catch (findError) {
-    console.warn(`  ⚠ Failed to find binaries: ${findError.message}`);
+  } catch (error) {
+    console.warn(`  ⚠ Failed to sign directory: ${error.message}`);
   }
   
   return results;

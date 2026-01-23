@@ -8,9 +8,16 @@
 #   APPLE_CERTIFICATE - Base64-encoded .p12 certificate (base64 -i certificate.p12)
 #   APPLE_CERTIFICATE_PASSWORD - Password for the .p12 file
 #   APPLE_SIGNING_IDENTITY - "Developer ID Application: Chomtana CHANJARASWICHAI (2N4Z8N5N6A)"
-#   APPLE_ID - Apple ID email for notarization (optional, for distribution)
-#   APPLE_PASSWORD - App-specific password for notarization (optional)
 #   APPLE_TEAM_ID - 10-character team ID: 2N4Z8N5N6A
+#
+# Optional secrets for notarization (choose one method):
+#   Method 1 - App Store Connect API (.p8 file - recommended):
+#     APPLE_API_ISSUER - Issuer ID (e.g., dd1c48ce-76d2-4342-a073-cfc2319777d4)
+#     APPLE_API_KEY - Key ID (e.g., DNJQ5M8CAT)
+#     APPLE_API_KEY_BASE64 - Base64-encoded .p8 file content (base64 -i AuthKey_*.p8)
+#   Method 2 - Apple ID credentials:
+#     APPLE_ID - Apple ID email
+#     APPLE_PASSWORD - App-specific password (from appleid.apple.com)
 #
 # Required secrets for Windows signing (add when ready):
 #   WINDOWS_CERTIFICATE - Base64-encoded certificate
@@ -222,6 +229,46 @@ jobs:
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
 
       # =========================================================================
+      # Setup App Store Connect API Key (.p8 file) for Notarization (macOS only)
+      # =========================================================================
+      - name: Setup App Store Connect API Key
+        if: matrix.platform == 'macos-latest' && env.APPLE_API_KEY != '' && env.APPLE_API_ISSUER != ''
+        run: |
+          echo "🔑 Setting up App Store Connect API key for notarization..."
+          # Create directory for API key
+          mkdir -p ~/.appstoreconnect/private_keys
+          
+          # If APPLE_API_KEY_BASE64 is provided, decode it (recommended method)
+          if [ -n "$APPLE_API_KEY_BASE64" ]; then
+            echo "$APPLE_API_KEY_BASE64" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${APPLE_API_KEY}.p8
+            echo "✅ Decoded .p8 file from base64 secret"
+          # Otherwise, if APPLE_API_KEY_PATH is a file path, use it directly
+          elif [ -n "$APPLE_API_KEY_PATH" ] && [ -f "$APPLE_API_KEY_PATH" ]; then
+            cp "$APPLE_API_KEY_PATH" ~/.appstoreconnect/private_keys/AuthKey_${APPLE_API_KEY}.p8
+            echo "✅ Copied .p8 file from path"
+          else
+            # Default path where the setup step places the file
+            if [ -f ~/.appstoreconnect/private_keys/AuthKey_${APPLE_API_KEY}.p8 ]; then
+              echo "✅ Using .p8 file from default location"
+            else
+              echo "⚠️  .p8 file not found, notarization may fail"
+            fi
+          fi
+          
+          # Export the path for Tauri to use
+          echo "APPLE_API_KEY_PATH=~/.appstoreconnect/private_keys/AuthKey_${APPLE_API_KEY}.p8" >> $GITHUB_ENV
+          
+          # Set permissions
+          chmod 600 ~/.appstoreconnect/private_keys/AuthKey_${APPLE_API_KEY}.p8 || true
+          
+          echo "✅ API key setup complete"
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_API_KEY_PATH: ${{ secrets.APPLE_API_KEY_PATH || '' }}
+
+      # =========================================================================
       # Make build script executable and run it
       # =========================================================================
       - name: Make build script executable
@@ -245,9 +292,15 @@ jobs:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Notarization: Use App Store Connect API (.p8) OR Apple ID credentials
+          # Option 1: App Store Connect API (recommended - uses .p8 file)
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER || '' }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY || '' }}
+          APPLE_API_KEY_PATH: ${{ secrets.APPLE_API_KEY_PATH || '' }}
+          # Option 2: Apple ID credentials (alternative)
+          APPLE_ID: ${{ secrets.APPLE_ID || '' }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD || '' }}
 
       - name: Run bundled build script (Windows)
         if: matrix.platform == 'windows-latest'

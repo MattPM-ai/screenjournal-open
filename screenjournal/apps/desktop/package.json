@@ -20,7 +20,8 @@
     "tauri": "tauri",
     "tauri:dev": "npm run check && node scripts/run-tauri.js dev",
     "desktop": "npm run check && node scripts/run-tauri.js dev",
-    "tauri:build": "npm run check && node scripts/run-tauri.js build && npm run bundle-resources && npm run sign-app",
+    "tauri:build": "npm run check && node scripts/run-tauri.js build && npm run bundle-resources && npm run sign-app && npm run notarize-app",
+    "notarize-app": "node scripts/notarize-app.js",
     "release": "node scripts/release.js"
   },
   "dependencies": {

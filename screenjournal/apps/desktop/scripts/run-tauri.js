@@ -152,6 +152,19 @@ function main() {
 
   // Clone current environment
   let env = { ...process.env };
+  
+  // For build command, temporarily disable Tauri's automatic notarization
+  // We'll handle notarization manually after signing all binaries
+  if (args[0] === 'build' && process.platform === 'darwin') {
+    // Unset notarization env vars so Tauri doesn't try to notarize automatically
+    // We'll notarize manually after signing
+    delete env.APPLE_API_ISSUER;
+    delete env.APPLE_API_KEY;
+    delete env.APPLE_API_KEY_PATH;
+    delete env.APPLE_ID;
+    delete env.APPLE_PASSWORD;
+    console.log('ℹ️  Disabled Tauri automatic notarization (will notarize manually after signing)\n');
+  }
 
   // Setup platform-specific environment
   switch (platform) {

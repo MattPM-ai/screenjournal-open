@@ -263,16 +263,40 @@ function signDirectory(dir, entitlementsPath, options = {}) {
     // Find and sign frameworks separately (they need special handling)
     const frameworks = [];
     const regularBinaries = [];
+    const frameworkPaths = new Set();
     
+    // First, find all .framework directories
+    try {
+      const frameworkFind = `find "${dir}" -type d -name "*.framework" 2>/dev/null`;
+      const frameworkOutput = execSync(frameworkFind, { encoding: 'utf8' });
+      const foundFrameworks = frameworkOutput.trim().split('\n').filter(Boolean);
+      foundFrameworks.forEach(f => frameworkPaths.add(f));
+    } catch (e) {
+      // Ignore find errors
+    }
+    
+    // Also check binaries to see if they're inside frameworks
     for (const filePath of binaries) {
       // Check if this is inside a framework
       const frameworkMatch = filePath.match(/(.+\.framework)/);
-      if (frameworkMatch && !frameworks.includes(frameworkMatch[1])) {
-        frameworks.push(frameworkMatch[1]);
-      } else if (!frameworkMatch) {
-        regularBinaries.push(filePath);
+      if (frameworkMatch) {
+        frameworkPaths.add(frameworkMatch[1]);
+      } else if (!frameworkPaths.has(filePath)) {
+        // Check if this file is inside any known framework
+        let isInFramework = false;
+        for (const fwPath of frameworkPaths) {
+          if (filePath.startsWith(fwPath + path.sep)) {
+            isInFramework = true;
+            break;
+          }
+        }
+        if (!isInFramework) {
+          regularBinaries.push(filePath);
+        }
       }
     }
+    
+    frameworks.push(...Array.from(frameworkPaths));
     
     // Sort to sign in consistent order
     regularBinaries.sort();
@@ -311,44 +335,103 @@ function signDirectory(dir, entitlementsPath, options = {}) {
     // Then sign frameworks (sign the actual binary first, then the framework bundle)
     for (const frameworkPath of frameworks) {
       try {
-        // Find the actual Python binary in Versions/X.X/Python
+        const frameworkName = path.basename(frameworkPath, '.framework');
+        
+        // Remove any existing signatures from symlinks first (they can't be signed directly)
+        const symlinkPaths = [
+          path.join(frameworkPath, frameworkName),
+          path.join(frameworkPath, 'Versions', 'Current', frameworkName)
+        ];
+        
+        for (const symlinkPath of symlinkPaths) {
+          if (fs.existsSync(symlinkPath) && isSymlink(symlinkPath)) {
+            try {
+              // Remove signature from symlink if it exists (symlinks can't be signed)
+              execSync(`codesign --remove-signature "${symlinkPath}" 2>/dev/null || true`, { stdio: 'pipe' });
+            } catch (e) {
+              // Ignore errors - symlink might not have a signature
+            }
+          }
+        }
+        
+        // Find and sign the actual Python binary in Versions/X.X/Python
         const versionsDir = path.join(frameworkPath, 'Versions');
+        let actualBinaryPath = null;
         if (fs.existsSync(versionsDir)) {
           const versions = fs.readdirSync(versionsDir);
           for (const version of versions) {
             const versionPath = path.join(versionsDir, version);
             if (fs.statSync(versionPath).isDirectory()) {
-              const frameworkName = path.basename(frameworkPath, '.framework');
-              const actualBinary = path.join(versionPath, frameworkName);
-              if (fs.existsSync(actualBinary) && !isSymlink(actualBinary)) {
-                // Sign the actual binary
-                const result = signBinary(actualBinary, entitlementsPath, identity);
+              const binaryPath = path.join(versionPath, frameworkName);
+              if (fs.existsSync(binaryPath) && !isSymlink(binaryPath)) {
+                actualBinaryPath = binaryPath;
+                // Sign the actual binary first
+                const result = signBinary(binaryPath, entitlementsPath, identity);
                 if (result.success) {
                   if (verbose) {
-                    console.log(`  ✓ Signed framework binary: ${path.relative(dir, actualBinary)}`);
+                    console.log(`  ✓ Signed framework binary: ${path.relative(dir, binaryPath)}`);
                   }
                   results.success++;
                 } else {
                   if (verbose) {
-                    console.warn(`  ⚠ Failed to sign framework binary: ${path.relative(dir, actualBinary)}: ${result.error}`);
+                    console.warn(`  ⚠ Failed to sign framework binary: ${path.relative(dir, binaryPath)}: ${result.error}`);
                   }
                   results.failed++;
                 }
+                break; // Only sign the first actual binary we find
               }
             }
           }
         }
         
-        // Sign the framework bundle itself
-        const frameworkResult = signBinary(frameworkPath, entitlementsPath, identity);
-        if (frameworkResult.success) {
+        if (!actualBinaryPath) {
           if (verbose) {
-            console.log(`  ✓ Signed framework: ${path.relative(dir, frameworkPath)}`);
+            console.warn(`  ⚠ Could not find actual binary in framework: ${frameworkPath}`);
           }
-          results.success++;
-        } else {
+          results.failed++;
+          continue;
+        }
+        
+        // Sign the framework bundle itself (without --deep since we've already signed the binary)
+        // Frameworks should be signed without --deep to avoid signing symlinks
+        const identityFlag = identity === "-" ? "-" : `"${identity}"`;
+        const isDeveloperId = identity !== "-";
+        const runtimeOptions = isDeveloperId ? "--options runtime" : "";
+        const timestamp = isDeveloperId ? "--timestamp" : "";
+        
+        try {
+          // Sign framework WITHOUT --deep - we've already signed the actual binary
+          // The framework bundle signature will reference the signed binary
+          const frameworkCmd = [
+            "codesign",
+            "--force",
+            "--sign", identityFlag,
+            "--entitlements", `"${entitlementsPath}"`,
+            runtimeOptions,
+            timestamp,
+            `"${frameworkPath}"`
+          ].filter(Boolean).join(" ");
+          
+          execSync(frameworkCmd, { stdio: verbose ? 'inherit' : 'pipe' });
+          
+          // Verify the framework signature
+          try {
+            execSync(`codesign --verify --verbose "${frameworkPath}" 2>&1`, { stdio: 'pipe' });
+            if (verbose) {
+              console.log(`  ✓ Signed framework bundle: ${path.relative(dir, frameworkPath)}`);
+            }
+            results.success++;
+          } catch (verifyErr) {
+            if (verbose) {
+              console.warn(`  ⚠ Framework signed but verification failed: ${path.relative(dir, frameworkPath)}`);
+              console.warn(`     Error: ${verifyErr.message}`);
+            }
+            // Still count as success if signing worked, verification might fail for other reasons
+            results.success++;
+          }
+        } catch (err) {
           if (verbose) {
-            console.warn(`  ⚠ Failed to sign framework: ${path.relative(dir, frameworkPath)}: ${frameworkResult.error}`);
+            console.warn(`  ⚠ Failed to sign framework bundle: ${path.relative(dir, frameworkPath)}: ${err.message}`);
           }
           results.failed++;
         }

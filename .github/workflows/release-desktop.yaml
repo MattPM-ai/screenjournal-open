@@ -255,18 +255,18 @@ jobs:
             fi
           fi
           
-          # Export the path for Tauri to use
-          echo "APPLE_API_KEY_PATH=~/.appstoreconnect/private_keys/AuthKey_${APPLE_API_KEY}.p8" >> $GITHUB_ENV
-          
           # Set permissions
           chmod 600 ~/.appstoreconnect/private_keys/AuthKey_${APPLE_API_KEY}.p8 || true
           
+          # Export the path for Tauri to use (use $HOME instead of ~ for GitHub Actions)
+          API_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${APPLE_API_KEY}.p8"
+          echo "APPLE_API_KEY_PATH=${API_KEY_PATH}" >> $GITHUB_ENV
           echo "✅ API key setup complete"
+          echo "📍 API key path: ${API_KEY_PATH}"
         env:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
-          APPLE_API_KEY_PATH: ${{ secrets.APPLE_API_KEY_PATH || '' }}
 
       # =========================================================================
       # Make build script executable and run it
@@ -295,12 +295,14 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           # Notarization: Use App Store Connect API (.p8) OR Apple ID credentials
           # Option 1: App Store Connect API (recommended - uses .p8 file)
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER || '' }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY || '' }}
-          APPLE_API_KEY_PATH: ${{ secrets.APPLE_API_KEY_PATH || '' }}
-          # Option 2: Apple ID credentials (alternative)
-          APPLE_ID: ${{ secrets.APPLE_ID || '' }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD || '' }}
+          # If these are set, Tauri will use API method instead of Apple ID
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_PATH: ${{ env.APPLE_API_KEY_PATH || '' }}
+          # Option 2: Apple ID credentials (only used if API credentials are not set)
+          # DO NOT set these if using App Store Connect API method
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
 
       - name: Run bundled build script (Windows)
         if: matrix.platform == 'windows-latest'

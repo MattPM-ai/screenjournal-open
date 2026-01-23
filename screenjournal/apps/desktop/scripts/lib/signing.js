@@ -66,6 +66,11 @@ function signBinary(binaryPath, entitlementsPath, signingIdentity = null) {
     return { success: false, error: `Binary not found: ${binaryPath}` };
   }
   
+  // Skip symlinks - they'll be handled when signing the framework or actual binary
+  if (isSymlink(binaryPath)) {
+    return { success: true, skipped: true };
+  }
+  
   // Verify entitlements exists
   if (!fileExists(entitlementsPath)) {
     return { success: false, error: `Entitlements not found: ${entitlementsPath}` };
@@ -83,11 +88,16 @@ function signBinary(binaryPath, entitlementsPath, signingIdentity = null) {
   const runtimeOptions = isDeveloperId ? "--options runtime" : "";
   const timestamp = isDeveloperId ? "--timestamp" : "";
   
+  // For frameworks, we need to sign them as bundles
+  const isFrameworkBundle = isFramework(binaryPath);
+  const deepFlag = isFrameworkBundle ? "--deep" : "";
+  
   try {
     // Build codesign command with required flags for notarization
     const codesignCmd = [
       "codesign",
       "--force",
+      deepFlag,
       "--sign", identityFlag,
       "--entitlements", `"${entitlementsPath}"`,
       runtimeOptions,
@@ -131,15 +141,47 @@ function findAllFiles(dir, fileList = []) {
 }
 
 /**
+ * Check if a file is a symlink
+ */
+function isSymlink(filePath) {
+  try {
+    const stat = fs.lstatSync(filePath);
+    return stat.isSymbolicLink();
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * Check if a path is a framework bundle
+ */
+function isFramework(filePath) {
+  return filePath.endsWith('.framework') && fs.statSync(filePath).isDirectory();
+}
+
+/**
  * Check if a file is a Mach-O binary that needs signing
  */
 function isBinaryFile(filePath) {
   try {
+    // Skip symlinks - they'll be handled when we sign the framework or actual binary
+    if (isSymlink(filePath)) {
+      return false;
+    }
+    
     // Check by extension first (fast)
     const ext = path.extname(filePath);
     const basename = path.basename(filePath);
-    if (ext === '.dylib' || ext === '.so' || basename === 'Python') {
+    if (ext === '.dylib' || ext === '.so') {
       return true;
+    }
+    
+    // Skip Python.framework/Python symlinks - we'll sign the actual binary and framework
+    if (basename === 'Python' && filePath.includes('.framework')) {
+      // Check if it's the actual binary in Versions/X.X/Python, not a symlink
+      if (!filePath.includes('/Versions/')) {
+        return false; // This is likely a symlink
+      }
     }
     
     // Check if it has execute permissions
@@ -218,14 +260,30 @@ function signDirectory(dir, entitlementsPath, options = {}) {
       return isBinaryFile(filePath);
     });
     
-    // Sort to sign in consistent order
-    binaries.sort();
+    // Find and sign frameworks separately (they need special handling)
+    const frameworks = [];
+    const regularBinaries = [];
     
-    if (verbose) {
-      console.log(`  📋 Found ${binaries.length} binaries to sign`);
+    for (const filePath of binaries) {
+      // Check if this is inside a framework
+      const frameworkMatch = filePath.match(/(.+\.framework)/);
+      if (frameworkMatch && !frameworks.includes(frameworkMatch[1])) {
+        frameworks.push(frameworkMatch[1]);
+      } else if (!frameworkMatch) {
+        regularBinaries.push(filePath);
+      }
     }
     
-    for (const binaryPath of binaries) {
+    // Sort to sign in consistent order
+    regularBinaries.sort();
+    frameworks.sort();
+    
+    if (verbose) {
+      console.log(`  📋 Found ${regularBinaries.length} binaries and ${frameworks.length} frameworks to sign`);
+    }
+    
+    // First, sign all regular binaries
+    for (const binaryPath of regularBinaries) {
       try {
         const result = signBinary(binaryPath, entitlementsPath, identity);
         
@@ -245,6 +303,58 @@ function signDirectory(dir, entitlementsPath, options = {}) {
       } catch (err) {
         if (verbose) {
           console.warn(`  ⚠ Error signing ${path.relative(dir, binaryPath)}: ${err.message}`);
+        }
+        results.failed++;
+      }
+    }
+    
+    // Then sign frameworks (sign the actual binary first, then the framework bundle)
+    for (const frameworkPath of frameworks) {
+      try {
+        // Find the actual Python binary in Versions/X.X/Python
+        const versionsDir = path.join(frameworkPath, 'Versions');
+        if (fs.existsSync(versionsDir)) {
+          const versions = fs.readdirSync(versionsDir);
+          for (const version of versions) {
+            const versionPath = path.join(versionsDir, version);
+            if (fs.statSync(versionPath).isDirectory()) {
+              const frameworkName = path.basename(frameworkPath, '.framework');
+              const actualBinary = path.join(versionPath, frameworkName);
+              if (fs.existsSync(actualBinary) && !isSymlink(actualBinary)) {
+                // Sign the actual binary
+                const result = signBinary(actualBinary, entitlementsPath, identity);
+                if (result.success) {
+                  if (verbose) {
+                    console.log(`  ✓ Signed framework binary: ${path.relative(dir, actualBinary)}`);
+                  }
+                  results.success++;
+                } else {
+                  if (verbose) {
+                    console.warn(`  ⚠ Failed to sign framework binary: ${path.relative(dir, actualBinary)}: ${result.error}`);
+                  }
+                  results.failed++;
+                }
+              }
+            }
+          }
+        }
+        
+        // Sign the framework bundle itself
+        const frameworkResult = signBinary(frameworkPath, entitlementsPath, identity);
+        if (frameworkResult.success) {
+          if (verbose) {
+            console.log(`  ✓ Signed framework: ${path.relative(dir, frameworkPath)}`);
+          }
+          results.success++;
+        } else {
+          if (verbose) {
+            console.warn(`  ⚠ Failed to sign framework: ${path.relative(dir, frameworkPath)}: ${frameworkResult.error}`);
+          }
+          results.failed++;
+        }
+      } catch (err) {
+        if (verbose) {
+          console.warn(`  ⚠ Error signing framework ${path.relative(dir, frameworkPath)}: ${err.message}`);
         }
         results.failed++;
       }

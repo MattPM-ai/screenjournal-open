@@ -337,14 +337,23 @@ function signDirectory(dir, entitlementsPath, options = {}) {
       try {
         const frameworkName = path.basename(frameworkPath, '.framework');
         
-        // Remove any existing signatures from symlinks first (they can't be signed directly)
+        // Remove ALL existing signatures from the entire framework structure first
+        // This ensures we start with a clean slate
+        try {
+          execSync(`codesign --remove-signature "${frameworkPath}" 2>/dev/null || true`, { stdio: 'pipe' });
+        } catch (e) {
+          // Ignore errors
+        }
+        
+        // Remove signatures from symlinks (they can't be signed directly)
         const symlinkPaths = [
           path.join(frameworkPath, frameworkName),
-          path.join(frameworkPath, 'Versions', 'Current', frameworkName)
+          path.join(frameworkPath, 'Versions', 'Current', frameworkName),
+          path.join(frameworkPath, 'Versions', 'Current')
         ];
         
         for (const symlinkPath of symlinkPaths) {
-          if (fs.existsSync(symlinkPath) && isSymlink(symlinkPath)) {
+          if (fs.existsSync(symlinkPath)) {
             try {
               // Remove signature from symlink if it exists (symlinks can't be signed)
               execSync(`codesign --remove-signature "${symlinkPath}" 2>/dev/null || true`, { stdio: 'pipe' });
@@ -392,15 +401,35 @@ function signDirectory(dir, entitlementsPath, options = {}) {
           continue;
         }
         
-        // Sign the framework bundle itself (without --deep since we've already signed the binary)
-        // Frameworks should be signed without --deep to avoid signing symlinks
+        // Sign the framework bundle itself
+        // For frameworks, we need to sign all nested binaries first, then the framework
+        // But we must NOT sign symlinks - they inherit signatures from what they point to
         const identityFlag = identity === "-" ? "-" : `"${identity}"`;
         const isDeveloperId = identity !== "-";
         const runtimeOptions = isDeveloperId ? "--options runtime" : "";
         const timestamp = isDeveloperId ? "--timestamp" : "";
         
         try {
-          // Sign framework WITHOUT --deep - we've already signed the actual binary
+          // First, sign any other binaries in the framework (not symlinks)
+          const frameworkBinaries = findAllFiles(frameworkPath).filter(f => {
+            if (isSymlink(f)) return false;
+            return isBinaryFile(f) && f !== actualBinaryPath;
+          });
+          
+          for (const fwBinary of frameworkBinaries) {
+            try {
+              const result = signBinary(fwBinary, entitlementsPath, identity);
+              if (result.success && verbose) {
+                console.log(`  ✓ Signed framework component: ${path.relative(dir, fwBinary)}`);
+              }
+            } catch (e) {
+              // Ignore errors for framework components
+            }
+          }
+          
+          // Now sign the framework bundle itself
+          // Do NOT use --deep - we've already signed the actual binary
+          // Using --deep would try to sign symlinks, which causes invalid signatures
           // The framework bundle signature will reference the signed binary
           const frameworkCmd = [
             "codesign",
@@ -413,6 +442,25 @@ function signDirectory(dir, entitlementsPath, options = {}) {
           ].filter(Boolean).join(" ");
           
           execSync(frameworkCmd, { stdio: verbose ? 'inherit' : 'pipe' });
+          
+          // CRITICAL: After signing the framework, remove any signatures from symlinks
+          // Symlinks should NEVER have signatures - they inherit from what they point to
+          // If symlinks have signatures, notarization will fail
+          for (const symlinkPath of symlinkPaths) {
+            if (fs.existsSync(symlinkPath) && isSymlink(symlinkPath)) {
+              try {
+                // Force remove signature from symlink - it should not have one
+                execSync(`codesign --remove-signature "${symlinkPath}" 2>/dev/null || true`, { stdio: 'pipe' });
+                // Verify it's a symlink and doesn't have a signature
+                const linkTarget = fs.readlinkSync(symlinkPath);
+                if (verbose) {
+                  console.log(`  ✓ Cleaned symlink: ${path.relative(dir, symlinkPath)} -> ${linkTarget}`);
+                }
+              } catch (e) {
+                // Ignore errors - symlink might not have a signature
+              }
+            }
+          }
           
           // Verify the framework signature
           try {

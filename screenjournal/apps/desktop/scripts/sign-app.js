@@ -175,6 +175,23 @@ function signAppBundle() {
       return 1;
     }
 
+    // Check for unsigned binaries (critical for notarization)
+    try {
+      console.log('🔍 Checking for unsigned binaries...');
+      const checkCmd = `codesign --verify --deep --strict --verbose=2 "${appBundlePath}" 2>&1 || true`;
+      const checkOutput = execSync(checkCmd, { encoding: 'utf8' });
+      
+      // Look for warnings about unsigned files
+      if (checkOutput.includes('unsigned') || checkOutput.includes('not signed')) {
+        console.warn('⚠️  Warning: Some binaries may not be properly signed');
+        console.warn('   This may cause notarization to fail');
+      } else {
+        console.log('✅ All binaries appear to be signed\n');
+      }
+    } catch (error) {
+      console.warn('⚠️  Could not verify all binaries');
+    }
+
     // Display signature information
     try {
       console.log('📋 Signature details:');

@@ -68,21 +68,80 @@ function notarizeApp() {
 
   // Submit for notarization
   console.log('🚀 Submitting for notarization...');
+  let submissionId = null;
   try {
-    const notarytoolCmd = [
+    // First submit without --wait to get the submission ID
+    const submitCmd = [
       'xcrun notarytool',
       'submit',
       `"${zipPath}"`,
       '--key', `"${apiKeyPath}"`,
       '--key-id', apiKey,
       '--issuer', apiIssuer,
-      '--wait'
+      '--output-format', 'json'
     ].join(' ');
 
-    execSync(notarytoolCmd, { stdio: 'inherit' });
+    const submitOutput = execSync(submitCmd, { encoding: 'utf8' });
+    const submitResult = JSON.parse(submitOutput);
+    submissionId = submitResult.id;
+    console.log(`📋 Submission ID: ${submissionId}\n`);
+  } catch (error) {
+    console.error(`❌ Failed to submit for notarization: ${error.message}`);
+    if (error.stdout) console.error(error.stdout);
+    if (error.stderr) console.error(error.stderr);
+    return 1;
+  }
+
+  // Wait for notarization to complete
+  console.log('⏳ Waiting for notarization to complete...');
+  try {
+    const waitCmd = [
+      'xcrun notarytool',
+      'wait',
+      submissionId,
+      '--key', `"${apiKeyPath}"`,
+      '--key-id', apiKey,
+      '--issuer', apiIssuer,
+      '--output-format', 'json'
+    ].join(' ');
+
+    const waitOutput = execSync(waitCmd, { encoding: 'utf8', stdio: 'pipe' });
+    const waitResult = JSON.parse(waitOutput);
+    
+    console.log(`📊 Status: ${waitResult.status}`);
+    
+    if (waitResult.status !== 'Accepted') {
+      console.error(`❌ Notarization failed with status: ${waitResult.status}`);
+      
+      // Get the notarization log
+      if (submissionId) {
+        console.log('\n📋 Fetching notarization log...');
+        try {
+          const logCmd = [
+            'xcrun notarytool',
+            'log',
+            submissionId,
+            '--key', `"${apiKeyPath}"`,
+            '--key-id', apiKey,
+            '--issuer', apiIssuer
+          ].join(' ');
+          
+          const logOutput = execSync(logCmd, { encoding: 'utf8' });
+          console.log('\n📄 Notarization Log:');
+          console.log(logOutput);
+        } catch (logError) {
+          console.warn(`⚠️  Could not fetch log: ${logError.message}`);
+        }
+      }
+      
+      return 1;
+    }
+    
     console.log('✅ Notarization successful!\n');
   } catch (error) {
-    console.error(`❌ Notarization failed: ${error.message}`);
+    console.error(`❌ Failed to wait for notarization: ${error.message}`);
+    if (error.stdout) console.error(error.stdout);
+    if (error.stderr) console.error(error.stderr);
     return 1;
   }
 

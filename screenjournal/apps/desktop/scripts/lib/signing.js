@@ -379,6 +379,22 @@ function signDirectory(dir, entitlementsPath, options = {}) {
                 if (result.success) {
                   if (verbose) {
                     console.log(`  ✓ Signed framework binary: ${path.relative(dir, binaryPath)}`);
+                    
+                    // Verify the binary is signed for all architectures
+                    try {
+                      const verifyOutput = execSync(`codesign --verify --verbose "${binaryPath}" 2>&1`, { encoding: 'utf8' });
+                      if (verbose) {
+                        console.log(`  📋 Binary signature info: ${verifyOutput.split('\n')[0]}`);
+                      }
+                      
+                      // Check architectures
+                      const lipoOutput = execSync(`lipo -info "${binaryPath}" 2>&1`, { encoding: 'utf8' });
+                      if (verbose) {
+                        console.log(`  📋 Binary architectures: ${lipoOutput.trim()}`);
+                      }
+                    } catch (e) {
+                      // Ignore verification errors
+                    }
                   }
                   results.success++;
                 } else {
@@ -443,22 +459,69 @@ function signDirectory(dir, entitlementsPath, options = {}) {
           
           execSync(frameworkCmd, { stdio: verbose ? 'inherit' : 'pipe' });
           
-          // CRITICAL: After signing the framework, remove any signatures from symlinks
+          // CRITICAL: After signing, recreate symlinks to ensure they're completely clean
           // Symlinks should NEVER have signatures - they inherit from what they point to
-          // If symlinks have signatures, notarization will fail
-          for (const symlinkPath of symlinkPaths) {
-            if (fs.existsSync(symlinkPath) && isSymlink(symlinkPath)) {
-              try {
-                // Force remove signature from symlink - it should not have one
-                execSync(`codesign --remove-signature "${symlinkPath}" 2>/dev/null || true`, { stdio: 'pipe' });
-                // Verify it's a symlink and doesn't have a signature
-                const linkTarget = fs.readlinkSync(symlinkPath);
-                if (verbose) {
-                  console.log(`  ✓ Cleaned symlink: ${path.relative(dir, symlinkPath)} -> ${linkTarget}`);
+          // Recreating them ensures no signatures are attached
+          try {
+            // Find which version directory contains the actual binary
+            const versionsDir = path.join(frameworkPath, 'Versions');
+            let versionName = null;
+            if (fs.existsSync(versionsDir)) {
+              const versions = fs.readdirSync(versionsDir);
+              for (const version of versions) {
+                const versionPath = path.join(versionsDir, version);
+                if (fs.statSync(versionPath).isDirectory()) {
+                  const binaryPath = path.join(versionPath, frameworkName);
+                  if (fs.existsSync(binaryPath) && !isSymlink(binaryPath) && binaryPath === actualBinaryPath) {
+                    versionName = version;
+                    break;
+                  }
                 }
-              } catch (e) {
-                // Ignore errors - symlink might not have a signature
               }
+            }
+            
+            if (!versionName) {
+              if (verbose) {
+                console.warn(`  ⚠ Could not determine version for framework symlinks`);
+              }
+            } else {
+              // Recreate Versions/Current symlink
+              const currentSymlink = path.join(frameworkPath, 'Versions', 'Current');
+              if (fs.existsSync(currentSymlink)) {
+                fs.unlinkSync(currentSymlink);
+              }
+              fs.symlinkSync(versionName, currentSymlink);
+              
+              // Recreate main framework symlink
+              const mainSymlink = path.join(frameworkPath, frameworkName);
+              if (fs.existsSync(mainSymlink)) {
+                fs.unlinkSync(mainSymlink);
+              }
+              fs.symlinkSync(`Versions/Current/${frameworkName}`, mainSymlink);
+              
+              if (verbose) {
+                console.log(`  ✓ Recreated framework symlinks pointing to Versions/${versionName}`);
+              }
+              
+              // Verify symlinks have no signatures (they shouldn't)
+              const symlinksToCheck = [mainSymlink, currentSymlink];
+              for (const symlinkPath of symlinksToCheck) {
+                try {
+                  // Try to verify - if it succeeds, it has a signature (bad)
+                  execSync(`codesign --verify "${symlinkPath}" 2>&1`, { stdio: 'pipe' });
+                  // If we get here, it has a signature - remove it
+                  execSync(`codesign --remove-signature "${symlinkPath}" 2>/dev/null || true`, { stdio: 'pipe' });
+                  if (verbose) {
+                    console.warn(`  ⚠ Removed signature from symlink: ${path.basename(symlinkPath)}`);
+                  }
+                } catch (e) {
+                  // Good - verification failed means no signature (expected for symlinks)
+                }
+              }
+            }
+          } catch (symlinkErr) {
+            if (verbose) {
+              console.warn(`  ⚠ Could not recreate symlinks: ${symlinkErr.message}`);
             }
           }
           

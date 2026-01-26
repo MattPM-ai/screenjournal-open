@@ -31,11 +31,24 @@ function notarizeApp() {
   const apiKey = process.env.APPLE_API_KEY;
   const apiKeyPath = process.env.APPLE_API_KEY_PATH;
 
+  console.log('🔍 Checking notarization credentials...');
+  console.log(`   APPLE_API_ISSUER: ${apiIssuer ? '✓ Set' : '✗ Not set'}`);
+  console.log(`   APPLE_API_KEY: ${apiKey ? '✓ Set' : '✗ Not set'}`);
+  console.log(`   APPLE_API_KEY_PATH: ${apiKeyPath ? `✓ Set (${apiKeyPath})` : '✗ Not set'}`);
+  
   if (!apiIssuer || !apiKey || !apiKeyPath) {
-    console.log('⚠️  Notarization credentials not found, skipping notarization');
+    console.log('\n⚠️  Notarization credentials not found, skipping notarization');
     console.log('   Set APPLE_API_ISSUER, APPLE_API_KEY, and APPLE_API_KEY_PATH to enable');
     return 0;
   }
+  
+  // Verify the API key file exists
+  if (!fs.existsSync(apiKeyPath)) {
+    console.error(`\n❌ API key file not found: ${apiKeyPath}`);
+    return 1;
+  }
+  
+  console.log('✅ All notarization credentials found\n');
 
   // Find the app bundle
   const appBundlePath = findAppBundle();

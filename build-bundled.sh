@@ -312,6 +312,15 @@ if [ $? -eq 0 ]; then
     cd screenjournal/apps/desktop
     npm run bundle-resources
     
+    # Re-sign and re-notarize after re-bundling (re-signing invalidates the previous notarization)
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        echo -e "${YELLOW}🔏 Re-signing app after re-bundling...${NC}"
+        npm run sign-app
+        
+        echo -e "${YELLOW}📋 Re-notarizing app after re-signing...${NC}"
+        npm run notarize-app
+    fi
+    
     # Find the DMG file
     if [[ "$OSTYPE" == "darwin"* ]]; then
         DMG_PATH=$(find src-tauri/target/release/bundle/dmg -name "*.dmg" 2>/dev/null | head -1)

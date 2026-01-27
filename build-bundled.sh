@@ -271,12 +271,6 @@ cd ..
 
 cd screenjournal/apps/desktop
 
-# Remove frontend from resources if it exists (to avoid Next.js trying to compile it)
-if [ -d "$TAURI_RESOURCES_DIR/frontend" ]; then
-    echo -e "${YELLOW}🧹 Removing existing frontend from resources (will be added after build)...${NC}"
-    rm -rf "$TAURI_RESOURCES_DIR/frontend"
-fi
-
 if [ ! -d node_modules ]; then
     echo -e "${YELLOW}📦 Installing desktop app dependencies...${NC}"
     npm install
@@ -289,44 +283,69 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Build Tauri app (this will create the DMG on macOS)
+# Copy frontend BEFORE Tauri build (so it's included in the initial bundle)
+# This avoids needing to re-sign and re-notarize
+echo -e "${YELLOW}📦 Copying frontend to Tauri resources (before build)...${NC}"
+cd "$SCRIPT_DIR"
+mkdir -p "$TAURI_RESOURCES_DIR/frontend"
+# Use rsync or cp with -L to follow symlinks and ensure complete copy
+if command -v rsync >/dev/null 2>&1; then
+    rsync -a --copy-links "$SCRIPT_DIR/sj-tracker-frontend/" "$TAURI_RESOURCES_DIR/frontend/sj-tracker-frontend/"
+else
+    # Use cp with -L to follow symlinks
+    cp -RL "$SCRIPT_DIR/sj-tracker-frontend" "$TAURI_RESOURCES_DIR/frontend/"
+fi
+echo -e "${GREEN}✅ Frontend copied to Tauri app${NC}"
+
+# Build Tauri app (this will bundle resources, sign, and notarize once)
+# Note: Tauri will create a DMG, but we'll recreate it after notarization
+cd screenjournal/apps/desktop
 npm run tauri:build
 if [ $? -eq 0 ]; then
-    echo -e "${GREEN}✅ Bundled desktop app built successfully${NC}"
+    echo -e "${GREEN}✅ Bundled desktop app built, signed, and notarized${NC}"
     
-    # Copy frontend AFTER desktop app build (to avoid Next.js trying to compile it)
-    echo -e "${YELLOW}📦 Copying frontend to Tauri resources...${NC}"
-    cd "$SCRIPT_DIR"
-    mkdir -p "$TAURI_RESOURCES_DIR/frontend"
-    # Use rsync or cp with -L to follow symlinks and ensure complete copy
-    if command -v rsync >/dev/null 2>&1; then
-        rsync -a --copy-links "$SCRIPT_DIR/sj-tracker-frontend/" "$TAURI_RESOURCES_DIR/frontend/sj-tracker-frontend/"
-    else
-        # Use cp with -L to follow symlinks
-        cp -RL "$SCRIPT_DIR/sj-tracker-frontend" "$TAURI_RESOURCES_DIR/frontend/"
-    fi
-    echo -e "${GREEN}✅ Frontend copied to Tauri app${NC}"
-    
-    # Re-run bundle-resources to include frontend in the final bundle
-    echo -e "${YELLOW}📦 Re-bundling resources with frontend...${NC}"
-    cd screenjournal/apps/desktop
-    npm run bundle-resources
-    
-    # Re-sign and re-notarize after re-bundling (re-signing invalidates the previous notarization)
+    # Recreate DMG after notarization to ensure it contains the final notarized app
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        echo -e "${YELLOW}🔏 Re-signing app after re-bundling...${NC}"
-        npm run sign-app
+        echo -e "${YELLOW}📦 Recreating DMG with notarized app bundle...${NC}"
         
-        echo -e "${YELLOW}📋 Re-notarizing app after re-signing...${NC}"
-        npm run notarize-app
-    fi
-    
-    # Find the DMG file
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        DMG_PATH=$(find src-tauri/target/release/bundle/dmg -name "*.dmg" 2>/dev/null | head -1)
-        if [ -n "$DMG_PATH" ]; then
-            echo -e "${GREEN}   DMG created: $DMG_PATH${NC}"
+        APP_BUNDLE_PATH="src-tauri/target/release/bundle/macos/ScreenJournal Tracker.app"
+        DMG_DIR="src-tauri/target/release/bundle/dmg"
+        DMG_NAME="ScreenJournal Tracker_0.1.0_aarch64.dmg"
+        DMG_PATH="$DMG_DIR/$DMG_NAME"
+        
+        # Remove old DMG if it exists
+        if [ -f "$DMG_PATH" ]; then
+            rm -f "$DMG_PATH"
+        fi
+        
+        # Create DMG using hdiutil
+        mkdir -p "$DMG_DIR"
+        
+        # Create a temporary directory for DMG contents
+        TEMP_DMG_DIR=$(mktemp -d)
+        cp -R "$APP_BUNDLE_PATH" "$TEMP_DMG_DIR/"
+        
+        # Create DMG
+        hdiutil create -volname "ScreenJournal Tracker" -srcfolder "$TEMP_DMG_DIR" -ov -format UDZO "$DMG_PATH"
+        
+        # Clean up temp directory
+        rm -rf "$TEMP_DMG_DIR"
+        
+        # Sign the DMG (if signing identity is available)
+        if [ -n "$APPLE_SIGNING_IDENTITY" ]; then
+            echo -e "${YELLOW}🔏 Signing DMG...${NC}"
+            codesign --force --sign "$APPLE_SIGNING_IDENTITY" --timestamp "$DMG_PATH"
+            echo -e "${GREEN}   ✅ DMG signed${NC}"
+        else
+            echo -e "${YELLOW}   ⚠️  APPLE_SIGNING_IDENTITY not set, skipping DMG signing${NC}"
+        fi
+        
+        if [ -f "$DMG_PATH" ]; then
+            echo -e "${GREEN}   ✅ DMG recreated: $DMG_PATH${NC}"
             echo -e "${GREEN}   You can now distribute this DMG file${NC}"
+        else
+            echo -e "${YELLOW}   ⚠️  Failed to recreate DMG, using original${NC}"
+            DMG_PATH=$(find "$DMG_DIR" -name "*.dmg" 2>/dev/null | head -1)
         fi
     fi
 else

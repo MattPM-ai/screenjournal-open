@@ -567,37 +567,66 @@ pub async fn start_report_service(app_handle: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// Start the Python chat agent
+/// Start the Python chat agent (using PyInstaller standalone executable)
 pub async fn start_chat_agent(app_handle: AppHandle) -> Result<(), String> {
     let resource_dir = get_resource_dir(&app_handle)?;
     let app_data_dir = get_app_data_dir(&app_handle)?;
     
-    let venv_dir = resource_dir.join("python").join("sj-tracker-chat-agent-venv");
-    let server_script = resource_dir.join("python").join("sj-tracker-chat-agent").join("server.py");
-    
-    // Check if Python environment exists
-    if !venv_dir.exists() {
-        return Err(format!("Python virtual environment not found at: {:?}", venv_dir));
-    }
-    
-    if !server_script.exists() {
-        return Err(format!("Chat agent server script not found at: {:?}", server_script));
-    }
-    
-    // Determine Python executable path based on platform
-    let python_exe = if cfg!(target_os = "windows") {
-        venv_dir.join("Scripts").join("python.exe")
+    // Use PyInstaller standalone executable (bundled app approach)
+    let chat_agent_exe = if cfg!(target_os = "windows") {
+        resource_dir.join("python").join("sj-tracker-chat-agent").join("sj-chat-agent.exe")
     } else {
-        venv_dir.join("bin").join("python3")
+        resource_dir.join("python").join("sj-tracker-chat-agent").join("sj-chat-agent")
     };
     
-    if !python_exe.exists() {
-        return Err(format!("Python executable not found at: {:?}", python_exe));
+    // Check if standalone executable exists
+    if !chat_agent_exe.exists() {
+        // Fallback: try Python venv approach (for development)
+        let venv_dir = resource_dir.join("python").join("sj-tracker-chat-agent-venv");
+        let server_script = resource_dir.join("python").join("sj-tracker-chat-agent").join("server.py");
+        
+        if venv_dir.exists() && server_script.exists() {
+            log::info!("Using Python venv approach (development mode)");
+            let python_exe = if cfg!(target_os = "windows") {
+                venv_dir.join("Scripts").join("python.exe")
+            } else {
+                venv_dir.join("bin").join("python3")
+            };
+            
+            if !python_exe.exists() {
+                return Err(format!("Python executable not found at: {:?}", python_exe));
+            }
+            
+            let mut cmd = TokioCommand::new(&python_exe);
+            cmd.arg(&server_script);
+            cmd.current_dir(app_data_dir.clone());
+            cmd.env("BACKEND_URL", "http://localhost:8085");
+            cmd.env("CHAT_AGENT_PORT", "8087");
+            cmd.env("HOST", "0.0.0.0");
+            cmd.stdout(Stdio::piped());
+            cmd.stderr(Stdio::piped());
+            
+            let child = cmd.spawn().map_err(|e| {
+                format!("Failed to start chat agent: {}", e)
+            })?;
+            
+            {
+                let mut python_processes = PYTHON_PROCESSES.lock().unwrap();
+                python_processes.push(child);
+            }
+            
+            sleep(Duration::from_secs(2)).await;
+            log::info!("Chat agent started (venv mode)");
+            return Ok(());
+        }
+        
+        return Err(format!("Chat agent executable not found at: {:?}", chat_agent_exe));
     }
     
-    // Start the Python chat agent
-    let mut cmd = TokioCommand::new(&python_exe);
-    cmd.arg(&server_script);
+    log::info!("Starting chat agent using standalone executable: {:?}", chat_agent_exe);
+    
+    // Start the chat agent using standalone executable
+    let mut cmd = TokioCommand::new(&chat_agent_exe);
     cmd.current_dir(app_data_dir.clone());
     cmd.env("BACKEND_URL", "http://localhost:8085");
     cmd.env("CHAT_AGENT_PORT", "8087");
@@ -605,9 +634,38 @@ pub async fn start_chat_agent(app_handle: AppHandle) -> Result<(), String> {
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
     
-    let child = cmd.spawn().map_err(|e| {
+    let mut child = cmd.spawn().map_err(|e| {
         format!("Failed to start chat agent: {}", e)
     })?;
+    
+    // Spawn task to read and log stderr for debugging
+    let stderr = child.stderr.take();
+    if let Some(stderr) = stderr {
+        let app_handle_clone = app_handle.clone();
+        tokio::spawn(async move {
+            let reader = BufReader::new(stderr);
+            let mut lines = reader.lines();
+            while let Ok(Some(line)) = lines.next_line().await {
+                if !line.trim().is_empty() {
+                    log::error!("Chat agent stderr: {}", line);
+                }
+            }
+        });
+    }
+    
+    // Spawn task to read and log stdout for debugging
+    let stdout = child.stdout.take();
+    if let Some(stdout) = stdout {
+        tokio::spawn(async move {
+            let reader = BufReader::new(stdout);
+            let mut lines = reader.lines();
+            while let Ok(Some(line)) = lines.next_line().await {
+                if !line.trim().is_empty() {
+                    log::info!("Chat agent stdout: {}", line);
+                }
+            }
+        });
+    }
     
     // Store Python process separately
     {
@@ -615,10 +673,21 @@ pub async fn start_chat_agent(app_handle: AppHandle) -> Result<(), String> {
         python_processes.push(child);
     }
     
-    // Wait a bit for the service to start
-    sleep(Duration::from_secs(2)).await;
+    // Wait a bit for the service to start (PyInstaller executables may take longer)
+    sleep(Duration::from_secs(3)).await;
     
-    log::info!("Chat agent started");
+    // Check if process is still running
+    {
+        let mut python_processes = PYTHON_PROCESSES.lock().unwrap();
+        if let Some(last_process) = python_processes.last_mut() {
+            if let Ok(Some(status)) = last_process.try_wait() {
+                log::error!("Chat agent process exited immediately with status: {:?}", status);
+                return Err("Chat agent process exited immediately".to_string());
+            }
+        }
+    }
+    
+    log::info!("Chat agent started (standalone executable)");
     Ok(())
 }
 

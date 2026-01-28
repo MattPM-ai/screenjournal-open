@@ -145,8 +145,9 @@ a = Analysis(
         'flask_cors',
         'langchain',
         'langchain.agents',
-        'langchain.agents.agent_executor',
-        'langchain.agents.create_tool_calling_agent',
+        'langchain.agents.agent',  # AgentExecutor is here
+        'langchain.agents.tool_calling_agent',  # create_tool_calling_agent package
+        'langchain.agents.tool_calling_agent.base',  # create_tool_calling_agent function
         'langchain_google_genai',
         'langchain_google_genai.chat_models',
         'langchain_core',

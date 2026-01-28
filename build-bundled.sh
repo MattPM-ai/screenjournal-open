@@ -104,7 +104,12 @@ deactivate
 cat > chat-agent.spec << 'EOF'
 # -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.utils.hooks import collect_submodules
+
 block_cipher = None
+
+# Collect all langchain.agents submodules to ensure all imports work
+langchain_agents_submodules = collect_submodules('langchain.agents')
 
 a = Analysis(
     ['server.py'],
@@ -135,7 +140,7 @@ a = Analysis(
         'pydantic.fields',
         'main',
         'backend_client',
-    ],
+    ] + langchain_agents_submodules,  # Add all collected submodules
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

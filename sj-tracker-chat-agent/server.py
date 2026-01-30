@@ -14,7 +14,9 @@ import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
-# Import directly from agent module to avoid __init__.py import order issues in PyInstaller
+# Import parent package first to ensure it's initialized in PyInstaller bundle
+import langchain.agents
+# Then import directly from agent module to avoid __init__.py import order issues
 from langchain.agents.agent import AgentExecutor
 from langchain_core.messages import HumanMessage, AIMessage
 

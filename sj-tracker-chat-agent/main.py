@@ -17,7 +17,9 @@ from datetime import datetime
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.tools import StructuredTool
-from langchain.agents import AgentExecutor, create_tool_calling_agent
+# Import directly from modules to avoid __init__.py import order issues in PyInstaller
+from langchain.agents.agent import AgentExecutor
+from langchain.agents.tool_calling_agent.base import create_tool_calling_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from backend_client import BackendToolClient

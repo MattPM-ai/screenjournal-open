@@ -137,6 +137,10 @@ block_cipher = None
 # Collect all langchain.agents submodules to ensure all imports work
 langchain_agents_submodules = collect_submodules('langchain.agents')
 
+# Collect all langchain_core submodules - agent.py depends on 129+ langchain_core modules
+# Without these, agent.py fails to load and AgentExecutor is never available
+langchain_core_submodules = collect_submodules('langchain_core')
+
 a = Analysis(
     ['server.py'],
     pathex=[],
@@ -166,7 +170,7 @@ a = Analysis(
         'pydantic.fields',
         'main',
         'backend_client',
-    ] + langchain_agents_submodules,  # Add all collected submodules
+    ] + langchain_agents_submodules + langchain_core_submodules,  # Add all collected submodules
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
